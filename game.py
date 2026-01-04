@@ -303,22 +303,38 @@ while running:
     
     # Spawn new boxes randomly
     if scroll_offset >= next_box_spawn_offset:
-        # Calculate reachable height range
+        # Calculate box placement constraints
         # Squirrel's ground position (top of squirrel when on ground)
         squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
-        # Maximum reachable height (squirrel can jump this high)
-        max_reachable_y = squirrel_ground_y - MAX_JUMP_HEIGHT
-        # Minimum height (must be above squirrel's ground level)
-        min_y = squirrel_ground_y - MAX_JUMP_HEIGHT  # Highest reachable point
-        # Maximum height (lowest box, but still above squirrel)
-        max_y = squirrel_ground_y - 10  # Just above squirrel's head when on ground
+        box_height = 40  # Box height (from Box class)
         
-        # Ensure boxes are always above squirrel and within reachable range
-        if min_y < max_y:
-            box_y = random.randint(int(min_y), int(max_y))
+        # Box bottom (box.y + box.height) must be:
+        # 1. Above the squirrel's height: box.y + box.height < squirrel_ground_y
+        #    Therefore: box.y < squirrel_ground_y - box.height
+        # 2. Within maximum jump reach: box.y + box.height >= squirrel_ground_y - MAX_JUMP_HEIGHT
+        #    Therefore: box.y >= squirrel_ground_y - MAX_JUMP_HEIGHT - box.height
+        
+        # Minimum box y: highest reachable point (box bottom at max jump height)
+        min_box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
+        
+        # Maximum box y: just above squirrel (box bottom just above squirrel's top)
+        max_box_y = squirrel_ground_y - box_height - 1  # -1 to ensure it's above
+        
+        # Ensure boxes are within valid range
+        if min_box_y < max_box_y:
+            box_y = random.randint(int(min_box_y), int(max_box_y))
         else:
-            # Fallback: place box at a safe height above squirrel
-            box_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2)
+            # Fallback: place box at a safe height
+            box_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - box_height)
+        
+        # Verify box bottom is in correct range
+        box_bottom = box_y + box_height
+        if box_bottom >= squirrel_ground_y:
+            # Adjust to ensure box bottom is above squirrel
+            box_y = squirrel_ground_y - box_height - 1
+        elif box_bottom < squirrel_ground_y - MAX_JUMP_HEIGHT:
+            # Adjust to ensure box is reachable
+            box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
         
         # Box x position is relative to scroll offset
         box_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
