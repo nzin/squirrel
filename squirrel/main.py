@@ -52,8 +52,44 @@ class Squirrel:
             self.image = None
             self.rotated_image = None
     
-    def jump(self):
-        if not self.is_jumping and not self.game_over:
+    def jump(self, boxes=None, clouds=None):
+        # Only allow jumping if squirrel is on ground or standing on a box/cloud
+        if self.game_over:
+            return
+        
+        # Check if on ground
+        on_ground = self.y >= self.ground_y - 1  # Small tolerance
+        
+        # Check if standing on a box
+        standing_on_box = False
+        if boxes:
+            squirrel_bottom = self.y + self.height
+            for box in boxes:
+                if box.active:
+                    box_rect = box.get_rect()
+                    box_top = box_rect.y
+                    if (abs(squirrel_bottom - box_top) < 5 and  # Within 5 pixels of box top
+                        self.x < box_rect.x + box_rect.width and
+                        self.x + self.width > box_rect.x):  # Horizontally overlapping
+                        standing_on_box = True
+                        break
+        
+        # Check if standing on a cloud
+        standing_on_cloud = False
+        if clouds:
+            squirrel_bottom = self.y + self.height
+            for cloud in clouds:
+                if cloud.active:
+                    cloud_rect = cloud.get_rect()
+                    cloud_top = cloud_rect.y
+                    if (abs(squirrel_bottom - cloud_top) < 5 and  # Within 5 pixels of cloud top
+                        self.x < cloud_rect.x + cloud_rect.width and
+                        self.x + self.width > cloud_rect.x):  # Horizontally overlapping
+                        standing_on_cloud = True
+                        break
+        
+        # Only jump if on ground or standing on a platform, and not already jumping upward
+        if (on_ground or standing_on_box or standing_on_cloud) and self.velocity_y >= 0:
             self.velocity_y = JUMP_STRENGTH
             self.is_jumping = True
     
@@ -708,7 +744,7 @@ async def main():
                 else:
                     # Normal game controls
                     if event.key == pygame.K_SPACE:
-                        squirrel.jump()
+                        squirrel.jump(boxes, clouds)
                     elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                         if acorns > 0:
                             # Throw acorn from squirrel position
