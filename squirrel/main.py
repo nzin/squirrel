@@ -94,12 +94,41 @@ class Squirrel:
             self.is_jumping = True
     
     def update(self, boxes=None, clouds=None):
-        # Apply gravity
-        self.velocity_y += GRAVITY
-        
         # Store previous position for collision detection
         self.prev_y = self.y
         self.prev_x = self.x
+        
+        # Check if already standing on a cloud or box (before applying gravity)
+        # This prevents gravity from being applied when standing on a platform
+        standing_on_platform = False
+        if clouds and self.velocity_y >= 0:
+            squirrel_bottom = self.y + self.height
+            for cloud in clouds:
+                if cloud.active:
+                    cloud_rect = cloud.get_rect()
+                    cloud_top = cloud_rect.y
+                    if (abs(squirrel_bottom - cloud_top) < 5 and
+                        self.x < cloud_rect.x + cloud_rect.width and
+                        self.x + self.width > cloud_rect.x):
+                        standing_on_platform = True
+                        break
+        
+        if boxes and not standing_on_platform and self.velocity_y >= 0:
+            squirrel_bottom = self.y + self.height
+            for box in boxes:
+                if box.active:
+                    box_rect = box.get_rect()
+                    box_top = box_rect.y
+                    if (abs(squirrel_bottom - box_top) < 5 and
+                        self.x < box_rect.x + box_rect.width and
+                        self.x + self.width > box_rect.x):
+                        standing_on_platform = True
+                        break
+        
+        # Apply gravity only if not standing on a platform
+        if not standing_on_platform:
+            self.velocity_y += GRAVITY
+        
         new_y = self.y + self.velocity_y
         
         # Check box collisions before moving
@@ -208,8 +237,10 @@ class Squirrel:
                         self.x < cloud_rect.x + cloud_rect.width and
                         self.x + self.width > cloud_rect.x):  # Horizontally overlapping with cloud
                         standing_on_cloud = True
-                        # Keep squirrel exactly on top of cloud
-                        self.y = cloud_top - self.height
+                        # Keep squirrel exactly on top of cloud (only adjust if needed)
+                        target_y = cloud_top - self.height
+                        if abs(self.y - target_y) > 1:  # Only adjust if significantly off
+                            self.y = target_y
                         self.velocity_y = 0
                         self.is_jumping = False
                         break
@@ -593,6 +624,99 @@ class Bird:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class Pterodactyl:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.prev_x = x
+        self.width = 90
+        self.height = 60
+        self.active = True
+        self.defeated = False
+        self.life_points = 2  # 2 points of life
+        self.forward_speed = -1.0  # Move forward (to the left) slowly
+        self.images = []
+        self.current_image_index = 0
+        self.image_change_time = time.time()
+        self.image_change_interval = 1.0  # Change image every 1 second
+        
+        # Animation properties for defeated state
+        self.animation_start_time = None
+        self.animation_velocity_y = 0
+        self.animation_velocity_x = -3.0  # Move left when defeated
+        self.animation_jump_height = 20  # Jump height when defeated
+        
+        # Load pterodactyl images
+        try:
+            img1 = pygame.image.load("assets/ptero1.png")
+            img1 = pygame.transform.scale(img1, (self.width, self.height))
+            self.images.append(img1)
+        except (pygame.error, FileNotFoundError, Exception) as e:
+            # Handle any error during image loading
+            self.images.append(None)
+        
+        try:
+            img2 = pygame.image.load("assets/ptero2.png")
+            img2 = pygame.transform.scale(img2, (self.width, self.height))
+            self.images.append(img2)
+        except (pygame.error, FileNotFoundError, Exception) as e:
+            # Handle any error during image loading
+            self.images.append(None)
+        
+        if not self.images:
+            self.images = [None, None]
+    
+    def update(self, scroll_speed):
+        if self.defeated:
+            # Animate defeated pterodactyl: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the position when defeated
+                self.defeated_floor_y = self.y
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
+            
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
+            
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Deactivate if off screen
+            if self.x + self.width < 0 or self.y > SCREEN_HEIGHT:
+                self.active = False
+        else:
+            self.prev_x = self.x
+            # Pterodactyl scrolls with the background but also moves forward slowly
+            self.x -= scroll_speed
+            self.x += self.forward_speed  # Move forward (to the right) slowly
+            
+            # Change image every 1 second (alternate between the two)
+            if time.time() - self.image_change_time >= self.image_change_interval:
+                self.current_image_index = (self.current_image_index + 1) % len(self.images)
+                self.image_change_time = time.time()
+            
+            # Deactivate if off screen to the left
+            if self.x + self.width < 0:
+                self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                color = (100, 100, 100) if self.defeated else (150, 100, 200)
+                pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
 # Calculate maximum jump height
 # Using physics: v² = u² + 2as, where v=0 at max height
 # 0 = JUMP_STRENGTH² + 2*GRAVITY*height
@@ -608,12 +732,15 @@ skunks = []  # Skunks on the floor
 birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
 clouds = []  # Clouds in the sky
+pterodactyls = []  # Pterodactyls in the air
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
 next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
+next_pterodactyl_spawn_offset = 1500  # Next pterodactyl will spawn at this scroll offset
 BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
+PTERODACTYL_SPAWN_DISTANCE = 2000  # Distance between pterodactyl spawns
 last_box_spawn_offset = None  # Track last box spawn scroll offset
 last_tree_spawn_offset = None  # Track last tree spawn scroll offset
 
@@ -642,9 +769,9 @@ except pygame.error:
 # Function to reset game state
 def reset_game():
     global scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
-    global acorns_list, boxes, trees, skunks, birds, popup_acorns, clouds
+    global acorns_list, boxes, trees, skunks, birds, popup_acorns, clouds, pterodactyls
     
     # Reset game state
     scroll_offset = 0
@@ -654,6 +781,7 @@ def reset_game():
     next_tree_spawn_offset = 500
     next_skunk_spawn_offset = 1000
     next_bird_spawn_offset = 800
+    next_pterodactyl_spawn_offset = 1500
     last_box_spawn_offset = None
     last_tree_spawn_offset = None
     
@@ -665,6 +793,7 @@ def reset_game():
     birds = []
     popup_acorns = []
     clouds = []
+    pterodactyls = []
     
     # Initialize clouds for continuous rows
     # Row 1 at y=300, Row 2 at y=400
@@ -693,7 +822,7 @@ def reset_game():
 # Main game loop
 async def main():
     global running, scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
     global game_over_time
     
@@ -910,6 +1039,38 @@ async def main():
         if squirrel.game_over and game_over_time is None:
             game_over_time = time.time()
         
+        # Check if squirrel is standing on a cloud (for pterodactyl spawning)
+        # Do this AFTER squirrel.update() so we have the current position
+        squirrel_on_cloud = False
+        if clouds and squirrel.velocity_y >= 0:
+            squirrel_bottom = squirrel.y + squirrel.height
+            for cloud in clouds:
+                if cloud.active:
+                    cloud_rect = cloud.get_rect()
+                    cloud_top = cloud_rect.y
+                    if (abs(squirrel_bottom - cloud_top) < 5 and
+                        squirrel.x < cloud_rect.x + cloud_rect.width and
+                        squirrel.x + squirrel.width > cloud_rect.x):
+                        squirrel_on_cloud = True
+                        break
+        
+        # Spawn new pterodactyls randomly when squirrel is on a cloud (only if game not over)
+        # Only spawn if we haven't already spawned one recently (check spawn offset)
+        if (not squirrel.game_over and squirrel_on_cloud and 
+            scroll_offset >= next_pterodactyl_spawn_offset):
+            try:
+                # Spawn pterodactyl at y = 100
+                pterodactyl_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+                pterodactyl_y = 100
+                pterodactyl = Pterodactyl(pterodactyl_x, pterodactyl_y)
+                pterodactyls.append(pterodactyl)
+                # Update spawn offset to prevent spawning multiple times
+                next_pterodactyl_spawn_offset = scroll_offset + random.randint(PTERODACTYL_SPAWN_DISTANCE, PTERODACTYL_SPAWN_DISTANCE + 600)
+            except Exception as e:
+                # If pterodactyl creation fails, skip it and update offset anyway to prevent infinite retries
+                print(f"Error creating pterodactyl: {e}")
+                next_pterodactyl_spawn_offset = scroll_offset + random.randint(PTERODACTYL_SPAWN_DISTANCE, PTERODACTYL_SPAWN_DISTANCE + 600)
+        
         # Update acorns (only if game not over)
         if not squirrel.game_over:
             for acorn in acorns_list[:]:
@@ -935,6 +1096,20 @@ async def main():
                         break
                 if not acorn.active:
                     acorns_list.remove(acorn)
+                    continue
+                # Check if acorn collides with a pterodactyl
+                for pterodactyl in pterodactyls:
+                    if not pterodactyl.defeated and pterodactyl.active and pterodactyl.get_rect().colliderect(acorn_rect):
+                        # Acorn hit pterodactyl - reduce life points
+                        pterodactyl.life_points -= 1
+                        acorn.active = False
+                        if pterodactyl.life_points <= 0:
+                            # Pterodactyl is defeated
+                            pterodactyl.defeated = True
+                            score += 1  # Increase score
+                        break
+                if not acorn.active:
+                    acorns_list.remove(acorn)
         
         # Update trees (only if game not over)
         for tree in trees[:]:
@@ -955,6 +1130,13 @@ async def main():
                 bird.update(SCROLL_SPEED)
             if not bird.active:
                 birds.remove(bird)
+        
+        # Update pterodactyls (only if game not over)
+        for pterodactyl in pterodactyls[:]:
+            if not squirrel.game_over:
+                pterodactyl.update(SCROLL_SPEED)
+            if not pterodactyl.active:
+                pterodactyls.remove(pterodactyl)
         
         # Update clouds (scroll with background)
         for cloud in clouds[:]:
@@ -1023,6 +1205,36 @@ async def main():
                     # If squirrel's right side hits the bird's left side, game over
                     if prev_bird_left >= squirrel.x + squirrel.width and bird_left <= squirrel.x + squirrel.width:
                         # Game over - hit left side of bird
+                        squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
+                        break
+            
+            # Check pterodactyl collisions with squirrel (only left side collision triggers game over)
+            for pterodactyl in pterodactyls:
+                if not pterodactyl.defeated and pterodactyl.active and pterodactyl.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the pterodactyl
+                    ptero_rect = pterodactyl.get_rect()
+                    ptero_left = ptero_rect.x
+                    prev_ptero_left = pterodactyl.prev_x
+                    # If squirrel's right side hits the pterodactyl's left side, game over
+                    if prev_ptero_left >= squirrel.x + squirrel.width and ptero_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of pterodactyl
+                        squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
+                        break
+            
+            # Check pterodactyl collisions with squirrel (only left side collision triggers game over)
+            for pterodactyl in pterodactyls:
+                if not pterodactyl.defeated and pterodactyl.active and pterodactyl.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the pterodactyl
+                    ptero_rect = pterodactyl.get_rect()
+                    ptero_left = ptero_rect.x
+                    prev_ptero_left = pterodactyl.prev_x
+                    # If squirrel's right side hits the pterodactyl's left side, game over
+                    if prev_ptero_left >= squirrel.x + squirrel.width and ptero_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of pterodactyl
                         squirrel.game_over = True
                         if game_over_time is None:
                             game_over_time = time.time()
@@ -1102,6 +1314,10 @@ async def main():
         # Draw birds (in the air)
         for bird in birds:
             bird.draw(screen)
+        
+        # Draw pterodactyls (in the air)
+        for pterodactyl in pterodactyls:
+            pterodactyl.draw(screen)
         
         # Draw clouds
         for cloud in clouds:
