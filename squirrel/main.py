@@ -511,11 +511,48 @@ try:
 except pygame.error:
     background_down = None
 
+# Function to reset game state
+def reset_game():
+    global scroll_offset, acorns, score
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
+    global last_box_spawn_offset, last_tree_spawn_offset
+    global acorns_list, boxes, trees, skunks, birds, popup_acorns
+    
+    # Reset game state
+    scroll_offset = 0
+    acorns = 3
+    score = 0
+    next_box_spawn_offset = 200
+    next_tree_spawn_offset = 500
+    next_skunk_spawn_offset = 1000
+    next_bird_spawn_offset = 800
+    last_box_spawn_offset = None
+    last_tree_spawn_offset = None
+    
+    # Clear all game objects
+    acorns_list = []
+    boxes = []
+    trees = []
+    skunks = []
+    birds = []
+    popup_acorns = []
+    
+    # Reset squirrel
+    squirrel.game_over = False
+    squirrel.x = 50
+    squirrel.y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
+    squirrel.velocity_y = 0
+    squirrel.is_jumping = False
+    
+    # Re-seed random for new game
+    random.seed(time.time())
+
 # Main game loop
 async def main():
     global running, scroll_offset, acorns, score
     global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
+    global game_over_time
     
     # Initialize random generator with current time for better randomness
     random.seed(time.time())
@@ -528,6 +565,11 @@ async def main():
     pygame.display.set_caption("Squirrel Game")
     clock = pygame.time.Clock()
     
+    # Menu state
+    menu_state = "main"  # "main" or "controls"
+    menu_selection = 0  # 0 = restart, 1 = show controls
+    game_over_time = None  # Track when game over occurred
+    
     running = True
     while running:
         # Handle events
@@ -535,15 +577,37 @@ async def main():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    if not squirrel.game_over:
+                if squirrel.game_over:
+                    # Check if 3 seconds have passed since game over
+                    if game_over_time is not None and time.time() - game_over_time >= 3.0:
+                        # Handle menu navigation
+                        if menu_state == "main":
+                            if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
+                                menu_selection = (menu_selection + 1) % 2
+                            elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                                if menu_selection == 0:
+                                    # Restart game
+                                    reset_game()
+                                    menu_state = "main"
+                                    menu_selection = 0
+                                    game_over_time = None  # Reset game over time
+                                elif menu_selection == 1:
+                                    # Show controls
+                                    menu_state = "controls"
+                        elif menu_state == "controls":
+                            # Return to main menu
+                            if event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                                menu_state = "main"
+                else:
+                    # Normal game controls
+                    if event.key == pygame.K_SPACE:
                         squirrel.jump()
-                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                    if acorns > 0 and not squirrel.game_over:
-                        # Throw acorn from squirrel position
-                        acorn = Acorn(squirrel.x + squirrel.width, squirrel.y + squirrel.height // 2)
-                        acorns_list.append(acorn)
-                        acorns -= 1
+                    elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                        if acorns > 0:
+                            # Throw acorn from squirrel position
+                            acorn = Acorn(squirrel.x + squirrel.width, squirrel.y + squirrel.height // 2)
+                            acorns_list.append(acorn)
+                            acorns -= 1
         
         # Update scroll offset (only if game not over)
         if not squirrel.game_over:
@@ -685,6 +749,10 @@ async def main():
         # Update game objects
         squirrel.update(boxes)
         
+        # Check if game over was just triggered (from box collision in Squirrel.update)
+        if squirrel.game_over and game_over_time is None:
+            game_over_time = time.time()
+        
         # Update acorns (only if game not over)
         if not squirrel.game_over:
             for acorn in acorns_list[:]:
@@ -745,6 +813,8 @@ async def main():
                     if prev_tree_left >= squirrel.x + squirrel.width and tree_left <= squirrel.x + squirrel.width:
                         # Game over - hit left side of tree
                         squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
                         break
             
             # Check skunk collisions with squirrel (only left side collision triggers game over)
@@ -758,6 +828,8 @@ async def main():
                     if prev_skunk_left >= squirrel.x + squirrel.width and skunk_left <= squirrel.x + squirrel.width:
                         # Game over - hit left side of skunk
                         squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
                         break
             
             # Check bird collisions with squirrel (only left side collision triggers game over)
@@ -771,6 +843,8 @@ async def main():
                     if prev_bird_left >= squirrel.x + squirrel.width and bird_left <= squirrel.x + squirrel.width:
                         # Game over - hit left side of bird
                         squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
                         break
         
         # Update boxes and check collection collisions (only if game not over)
@@ -874,6 +948,88 @@ async def main():
         text_rect = acorn_text.get_rect()
         text_rect.topright = (SCREEN_WIDTH - 10, 10)
         screen.blit(acorn_text, text_rect)
+    
+        # Draw game over menu (only after 3 second delay)
+        if squirrel.game_over:
+            # Check if 3 seconds have passed since game over
+            show_menu = game_over_time is not None and time.time() - game_over_time >= 3.0
+            
+            # Semi-transparent overlay
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+            
+            menu_font = pygame.font.Font(None, 72)
+            menu_item_font = pygame.font.Font(None, 48)
+            instruction_font = pygame.font.Font(None, 32)
+            
+            if not show_menu:
+                # Show "GAME OVER" text while waiting
+                game_over_text = menu_font.render("GAME OVER", True, (255, 0, 0))
+                game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                screen.blit(game_over_text, game_over_rect)
+            elif menu_state == "main":
+                # Game Over title
+                game_over_text = menu_font.render("GAME OVER", True, (255, 0, 0))
+                game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, 150))
+                screen.blit(game_over_text, game_over_rect)
+                
+                # Final score
+                final_score_text = font.render(f"Final Score: {score}", True, (255, 255, 255))
+                final_score_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, 220))
+                screen.blit(final_score_text, final_score_rect)
+                
+                # Menu options
+                menu_y = 300
+                menu_items = ["Restart", "Show Controls"]
+                
+                for i, item in enumerate(menu_items):
+                    color = (255, 255, 0) if i == menu_selection else (255, 255, 255)
+                    item_text = menu_item_font.render(item, True, color)
+                    item_rect = item_text.get_rect(center=(SCREEN_WIDTH // 2, menu_y + i * 60))
+                    screen.blit(item_text, item_rect)
+                    
+                    # Draw selection indicator (moved further left to avoid overlap)
+                    if i == menu_selection:
+                        indicator = ">"
+                        indicator_text = menu_item_font.render(indicator, True, (255, 255, 0))
+                        indicator_rect = indicator_text.get_rect(center=(SCREEN_WIDTH // 2 - 180, menu_y + i * 60))
+                        screen.blit(indicator_text, indicator_rect)
+                
+                # Instructions
+                help_text = instruction_font.render("Use UP/DOWN to navigate, ENTER/SPACE to select", True, (200, 200, 200))
+                help_rect = help_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+                screen.blit(help_text, help_rect)
+            
+            elif menu_state == "controls":
+                # Controls title
+                controls_title = menu_font.render("Controls", True, (255, 255, 255))
+                controls_title_rect = controls_title.get_rect(center=(SCREEN_WIDTH // 2, 100))
+                screen.blit(controls_title, controls_title_rect)
+                
+                # Control instructions
+                controls = [
+                    "SPACE - Jump",
+                    "SHIFT - Throw Acorn",
+                    "",
+                    "Collect boxes for acorns!",
+                    "Avoid trees, skunks, and birds!",
+                    "Hit enemies with acorns to score!",
+                ]
+                
+                controls_y = 200
+                for control in controls:
+                    if control:
+                        control_text = instruction_font.render(control, True, (255, 255, 255))
+                        control_rect = control_text.get_rect(center=(SCREEN_WIDTH // 2, controls_y))
+                        screen.blit(control_text, control_rect)
+                    controls_y += 40
+                
+                # Return instruction
+                return_text = instruction_font.render("Press ESC, ENTER, or SPACE to return", True, (200, 200, 200))
+                return_rect = return_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+                screen.blit(return_text, return_rect)
     
         # Update display
         pygame.display.flip()
