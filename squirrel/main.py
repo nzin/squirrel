@@ -954,82 +954,84 @@ async def main():
             # Check if 3 seconds have passed since game over
             show_menu = game_over_time is not None and time.time() - game_over_time >= 3.0
             
-            # Semi-transparent overlay
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            overlay.set_alpha(200)
-            overlay.fill((0, 0, 0))
-            screen.blit(overlay, (0, 0))
-            
             menu_font = pygame.font.Font(None, 72)
             menu_item_font = pygame.font.Font(None, 48)
             instruction_font = pygame.font.Font(None, 32)
             
             if not show_menu:
-                # Show "GAME OVER" text while waiting
+                # Show "GAME OVER" text while waiting (no overlay - see the game clearly)
                 game_over_text = menu_font.render("GAME OVER", True, (255, 0, 0))
                 game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
                 screen.blit(game_over_text, game_over_rect)
-            elif menu_state == "main":
-                # Game Over title
-                game_over_text = menu_font.render("GAME OVER", True, (255, 0, 0))
-                game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, 150))
-                screen.blit(game_over_text, game_over_rect)
+            else:
+                # Show menu with overlay after 3 seconds
+                # Semi-transparent overlay
+                overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+                overlay.set_alpha(200)
+                overlay.fill((0, 0, 0))
+                screen.blit(overlay, (0, 0))
                 
-                # Final score
-                final_score_text = font.render(f"Final Score: {score}", True, (255, 255, 255))
-                final_score_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, 220))
-                screen.blit(final_score_text, final_score_rect)
-                
-                # Menu options
-                menu_y = 300
-                menu_items = ["Restart", "Show Controls"]
-                
-                for i, item in enumerate(menu_items):
-                    color = (255, 255, 0) if i == menu_selection else (255, 255, 255)
-                    item_text = menu_item_font.render(item, True, color)
-                    item_rect = item_text.get_rect(center=(SCREEN_WIDTH // 2, menu_y + i * 60))
-                    screen.blit(item_text, item_rect)
+                if menu_state == "main":
+                    # Game Over title
+                    game_over_text = menu_font.render("GAME OVER", True, (255, 0, 0))
+                    game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, 150))
+                    screen.blit(game_over_text, game_over_rect)
                     
-                    # Draw selection indicator (moved further left to avoid overlap)
-                    if i == menu_selection:
-                        indicator = ">"
-                        indicator_text = menu_item_font.render(indicator, True, (255, 255, 0))
-                        indicator_rect = indicator_text.get_rect(center=(SCREEN_WIDTH // 2 - 180, menu_y + i * 60))
-                        screen.blit(indicator_text, indicator_rect)
+                    # Final score
+                    final_score_text = font.render(f"Final Score: {score}", True, (255, 255, 255))
+                    final_score_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, 220))
+                    screen.blit(final_score_text, final_score_rect)
+                    
+                    # Menu options
+                    menu_y = 300
+                    menu_items = ["Restart", "Show Controls"]
+                    
+                    for i, item in enumerate(menu_items):
+                        color = (255, 255, 0) if i == menu_selection else (255, 255, 255)
+                        item_text = menu_item_font.render(item, True, color)
+                        item_rect = item_text.get_rect(center=(SCREEN_WIDTH // 2, menu_y + i * 60))
+                        screen.blit(item_text, item_rect)
+                        
+                        # Draw selection indicator (moved further left to avoid overlap)
+                        if i == menu_selection:
+                            indicator = ">"
+                            indicator_text = menu_item_font.render(indicator, True, (255, 255, 0))
+                            indicator_rect = indicator_text.get_rect(center=(SCREEN_WIDTH // 2 - 180, menu_y + i * 60))
+                            screen.blit(indicator_text, indicator_rect)
+                    
+                    # Instructions
+                    help_text = instruction_font.render("Use UP/DOWN to navigate, ENTER/SPACE to select", True, (200, 200, 200))
+                    help_rect = help_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+                    screen.blit(help_text, help_rect)
                 
-                # Instructions
-                help_text = instruction_font.render("Use UP/DOWN to navigate, ENTER/SPACE to select", True, (200, 200, 200))
-                help_rect = help_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
-                screen.blit(help_text, help_rect)
-            
-            elif menu_state == "controls":
-                # Controls title
-                controls_title = menu_font.render("Controls", True, (255, 255, 255))
-                controls_title_rect = controls_title.get_rect(center=(SCREEN_WIDTH // 2, 100))
-                screen.blit(controls_title, controls_title_rect)
-                
-                # Control instructions
-                controls = [
-                    "SPACE - Jump",
-                    "SHIFT - Throw Acorn",
-                    "",
-                    "Collect boxes for acorns!",
-                    "Avoid trees, skunks, and birds!",
-                    "Hit enemies with acorns to score!",
-                ]
-                
-                controls_y = 200
-                for control in controls:
-                    if control:
-                        control_text = instruction_font.render(control, True, (255, 255, 255))
-                        control_rect = control_text.get_rect(center=(SCREEN_WIDTH // 2, controls_y))
-                        screen.blit(control_text, control_rect)
-                    controls_y += 40
-                
-                # Return instruction
-                return_text = instruction_font.render("Press ESC, ENTER, or SPACE to return", True, (200, 200, 200))
-                return_rect = return_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
-                screen.blit(return_text, return_rect)
+                elif menu_state == "controls":
+                    # Controls title
+                    controls_title = menu_font.render("Controls", True, (255, 255, 255))
+                    controls_title_rect = controls_title.get_rect(center=(SCREEN_WIDTH // 2, 100))
+                    screen.blit(controls_title, controls_title_rect)
+                    
+                    # Control instructions
+                    controls = [
+                        "SPACE - Jump",
+                        "SHIFT - Throw Acorn",
+                        "",
+                        "Collect boxes for acorns!",
+                        "Avoid trees, skunks, and birds!",
+                        "Hit enemies with acorns to score!",
+                    ]
+                    
+                    controls_y = 200
+                    for control in controls:
+                        if control:
+                            control_text = instruction_font.render(control, True, (255, 255, 255))
+                            control_rect = control_text.get_rect(center=(SCREEN_WIDTH // 2, controls_y))
+                            screen.blit(control_text, control_rect)
+                        controls_y += 40
+                    
+                    # Return instruction
+                    return_text = instruction_font.render("Press ESC, ENTER, or SPACE to return", True, (200, 200, 200))
+                    return_rect = return_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+                    screen.blit(return_text, return_rect)
     
         # Update display
         pygame.display.flip()
