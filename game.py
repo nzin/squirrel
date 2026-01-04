@@ -43,13 +43,18 @@ class Squirrel:
         self.is_jumping = False
         self.ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
         self.prev_y = self.y  # Track previous position for collision detection
+        self.game_over = False  # Game over state
+        self.rotated_image = None  # Rotated image for game over
         # Load squirrel image
         try:
             self.image = pygame.image.load("assets/squirrel.png")
             self.image = pygame.transform.scale(self.image, (self.width, self.height))
+            # Create rotated image for game over (90 degrees)
+            self.rotated_image = pygame.transform.rotate(self.image, 90)
         except pygame.error:
             # Fallback to a simple rectangle if image fails to load
             self.image = None
+            self.rotated_image = None
     
     def jump(self):
         if not self.is_jumping:
@@ -110,17 +115,7 @@ class Squirrel:
                         self.velocity_y = 0
                         self.is_jumping = False
                     else:
-                        # Horizontal overlap - determine best position
-                        # If moving down, land on top
-                        if self.velocity_y > 0:
-                            # Position squirrel so its bottom is at the box's top
-                            new_y = box_rect.y + box_rect.height - self.height
-                            self.velocity_y = 0
-                            self.is_jumping = False
-                        # If moving up, stop at bottom
-                        elif self.velocity_y < 0:
-                            new_y = box_rect.y - self.height
-                            self.velocity_y = 0
+                        self.game_over = True
         
         self.y = new_y
         
@@ -153,7 +148,10 @@ class Squirrel:
                 self.is_jumping = False
     
     def draw(self, surface):
-        if self.image:
+        if self.game_over and self.rotated_image:
+            # Draw rotated squirrel image (90 degrees) when game over
+            surface.blit(self.rotated_image, (self.x, self.y))
+        elif self.image:
             # Draw squirrel image
             surface.blit(self.image, (self.x, self.y))
         else:
@@ -322,11 +320,12 @@ while running:
                     acorns_list.append(acorn)
                     acorns -= 1
     
-    # Update scroll offset
-    scroll_offset += SCROLL_SPEED
+    # Update scroll offset (only if game not over)
+    if not squirrel.game_over:
+        scroll_offset += SCROLL_SPEED
     
-    # Spawn new boxes randomly
-    if scroll_offset >= next_box_spawn_offset:
+    # Spawn new boxes randomly (only if game not over)
+    if not squirrel.game_over and scroll_offset >= next_box_spawn_offset:
         # Calculate box placement constraints
         # Squirrel's ground position (top of squirrel when on ground)
         squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
@@ -369,16 +368,18 @@ while running:
     # Update game objects
     squirrel.update(boxes)
     
-    # Update acorns
-    for acorn in acorns_list[:]:
-        acorn.update()
-        if not acorn.active:
-            acorns_list.remove(acorn)
+    # Update acorns (only if game not over)
+    if not squirrel.game_over:
+        for acorn in acorns_list[:]:
+            acorn.update()
+            if not acorn.active:
+                acorns_list.remove(acorn)
     
-    # Update boxes and check collection collisions
+    # Update boxes and check collection collisions (only if game not over)
     squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
     for box in boxes[:]:
-        box.update(SCROLL_SPEED)
+        if not squirrel.game_over:
+            box.update(SCROLL_SPEED)
         if not box.active:
             boxes.remove(box)
         elif not box.collected:
@@ -399,14 +400,16 @@ while running:
                 # Reset collection flag if not hitting from below
                 box.should_collect = False
     
-    # Update popup acorns
+    # Update popup acorns (only if game not over)
     for popup in popup_acorns[:]:
-        popup.update(SCROLL_SPEED)
+        if not squirrel.game_over:
+            popup.update(SCROLL_SPEED)
         if not popup.active:
             popup_acorns.remove(popup)
     
     # Draw everything
     # Draw scrolling upper background (sky area above soil)
+    # Scrolling stops automatically when game_over because scroll_offset stops updating
     if background_up:
         up_offset = scroll_offset % background_up.get_width()
         for i in range(-1, 3):
@@ -417,6 +420,7 @@ while running:
         pygame.draw.rect(screen, SKY_BLUE, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SOIL_HEIGHT))
     
     # Draw scrolling lower background (ground area below SOIL_HEIGHT)
+    # Scrolling stops automatically when game_over because scroll_offset stops updating
     soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
     if background_down:
         down_offset = scroll_offset % background_down.get_width()
