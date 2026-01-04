@@ -42,6 +42,7 @@ class Squirrel:
         self.velocity_y = 0
         self.is_jumping = False
         self.ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
+        self.prev_y = self.y  # Track previous position for collision detection
         # Load squirrel image
         try:
             self.image = pygame.image.load("assets/squirrel.png")
@@ -60,7 +61,7 @@ class Squirrel:
         self.velocity_y += GRAVITY
         
         # Store previous position for collision detection
-        prev_y = self.y
+        self.prev_y = self.y
         new_y = self.y + self.velocity_y
         
         # Check box collisions before moving
@@ -70,16 +71,39 @@ class Squirrel:
                 if box.active and box.get_rect().colliderect(squirrel_rect):
                     box_rect = box.get_rect()
                     # Determine collision direction based on previous position
-                    prev_bottom = prev_y + self.height
-                    prev_top = prev_y
+                    prev_bottom = self.prev_y + self.height
+                    prev_top = self.prev_y
+                    box_bottom = box_rect.y + box_rect.height
+                    box_top = box_rect.y
                     
-                    # Check if hitting from below (jumping into box)
-                    if prev_bottom <= box_rect.y and self.velocity_y < 0:
-                        # Squirrel is jumping up into the box - stop at bottom of box
-                        new_y = box_rect.y - self.height
-                        self.velocity_y = 0
+                    print("prev_bottom", prev_bottom)
+                    print("prev_top", prev_top)
+                    print("box_bottom", box_bottom)
+                    print("box_top", box_top)
+                    print("new_y", new_y)
+                    print("self.velocity_y", self.velocity_y)
+                    print("self.is_jumping", self.is_jumping)
+                    print("box.should_collect", box.should_collect)
+                    # Check if hitting from below (jumping into box from bottom)
+                    # The squirrel must be completely below the box and moving upward
+                    if prev_bottom >= box_top and self.velocity_y < 0:
+                        print("hitting from below")
+                        # Check if squirrel's top (new_y) would reach or pass the box's bottom
+                        # The top hitting the bottom means: new_y >= box_bottom
+                        if new_y <= box_bottom:
+                            print("squirrel's top reached or passed the box's bottom - collect it!")
+                            # Squirrel's top reached or passed the box's bottom - collect it!
+                            box.should_collect = True
+                            # Position squirrel so its top is exactly at the box's bottom
+                            new_y = box_bottom
+                            self.velocity_y = 0
+                        else:
+                            # Squirrel is jumping up but top hasn't reached bottom yet
+                            # Don't stop it - let it continue moving up until top reaches bottom
+                            # We'll detect the collision again next frame
+                            pass
                     # Check if landing on top of box
-                    elif prev_top >= box_rect.y + box_rect.height or self.velocity_y > 0:
+                    elif prev_top <= box_rect.y + box_rect.height or self.velocity_y > 0:
                         # Squirrel is above or falling onto the box - land on top
                         new_y = box_rect.y + box_rect.height
                         self.velocity_y = 0
@@ -196,6 +220,7 @@ class Box:
         self.y = y
         self.active = True
         self.collected = False  # Track if box has been collected
+        self.should_collect = False  # Flag to mark for collection
     
     def update(self, scroll_speed):
         # Boxes scroll with the background
@@ -279,18 +304,21 @@ while running:
     # Spawn new boxes randomly
     if scroll_offset >= next_box_spawn_offset:
         # Calculate reachable height range
-        ground_y = SCREEN_HEIGHT - SOIL_HEIGHT
-        max_reachable_y = ground_y - MAX_JUMP_HEIGHT - 40  # Subtract box height
-        min_y = 50  # Minimum height from top
-        # Ensure boxes are within reachable range
-        reachable_min = max(min_y, max_reachable_y)
-        reachable_max = ground_y - 40  # Just above ground, accounting for box height
+        # Squirrel's ground position (top of squirrel when on ground)
+        squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
+        # Maximum reachable height (squirrel can jump this high)
+        max_reachable_y = squirrel_ground_y - MAX_JUMP_HEIGHT
+        # Minimum height (must be above squirrel's ground level)
+        min_y = squirrel_ground_y - MAX_JUMP_HEIGHT  # Highest reachable point
+        # Maximum height (lowest box, but still above squirrel)
+        max_y = squirrel_ground_y - 10  # Just above squirrel's head when on ground
         
-        if reachable_min < reachable_max:
-            box_y = random.randint(int(reachable_min), int(reachable_max))
+        # Ensure boxes are always above squirrel and within reachable range
+        if min_y < max_y:
+            box_y = random.randint(int(min_y), int(max_y))
         else:
-            # Fallback if calculation is off
-            box_y = int((reachable_min + reachable_max) / 2)
+            # Fallback: place box at a safe height above squirrel
+            box_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2)
         
         # Box x position is relative to scroll offset
         box_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
@@ -313,17 +341,23 @@ while running:
         box.update(SCROLL_SPEED)
         if not box.active:
             boxes.remove(box)
-        elif not box.collected and box.get_rect().colliderect(squirrel_rect):
-            # Squirrel collected the box (touching it)
-            box.collected = True
-            acorns_gained = random.randint(1, 3)
-            acorns += acorns_gained
-            # Create popup acorns above the box
-            for i in range(acorns_gained):
-                # Spread them out horizontally
-                offset_x = (i - (acorns_gained - 1) / 2) * 25
-                popup = PopupAcorn(box.x, box.y, box.width, offset_x)
-                popup_acorns.append(popup)
+        elif not box.collected:
+            # Check if box was marked for collection (squirrel's top hit box's bottom)
+            if box.should_collect:
+                # Squirrel collected the box by hitting with its top at the box's bottom
+                box.collected = True
+                box.should_collect = False  # Reset flag
+                acorns_gained = random.randint(1, 3)
+                acorns += acorns_gained
+                # Create popup acorns above the box
+                for i in range(acorns_gained):
+                    # Spread them out horizontally
+                    offset_x = (i - (acorns_gained - 1) / 2) * 25
+                    popup = PopupAcorn(box.x, box.y, box.width, offset_x)
+                    popup_acorns.append(popup)
+            elif box.get_rect().colliderect(squirrel_rect):
+                # Reset collection flag if not hitting from below
+                box.should_collect = False
     
     # Update popup acorns
     for popup in popup_acorns[:]:
