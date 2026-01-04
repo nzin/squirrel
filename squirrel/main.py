@@ -303,7 +303,7 @@ class Skunk:
         self.active = True
         self.defeated = False  # Track if skunk is defeated
         self.image_change_time = time.time()
-        self.image_change_interval = 2.0  # Change image every 2 seconds
+        self.image_change_interval = 1.5  # Change image every 1.5 seconds
         self.current_image_index = 0
         self.images = []
         self.width = 80
@@ -517,6 +517,9 @@ async def main():
     global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
     
+    # Initialize random generator with current time for better randomness
+    random.seed(time.time())
+
     # Initialize Pygame
     pygame.init()
     
