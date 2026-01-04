@@ -33,6 +33,7 @@ clock = pygame.time.Clock()
 # Game state
 acorns = 3
 scroll_offset = 0
+score = 0  # Player score
 
 class Squirrel:
     def __init__(self):
@@ -87,11 +88,9 @@ class Squirrel:
                     # Check if hitting from below (jumping into box from bottom)
                     # The squirrel must be completely below the box and moving upward
                     if prev_bottom >= box_top and self.velocity_y < 0:
-                        print("hitting from below")
                         # Check if squirrel's top (new_y) would reach or pass the box's bottom
                         # The top hitting the bottom means: new_y >= box_bottom
                         if new_y <= box_bottom:
-                            print("squirrel's top reached or passed the box's bottom - collect it!")
                             # Squirrel's top reached or passed the box's bottom - collect it!
                             box.should_collect = True
                             # Position squirrel so its top is exactly at the box's bottom
@@ -494,6 +493,8 @@ next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
 next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
 BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
+last_box_spawn_offset = None  # Track last box spawn scroll offset
+last_tree_spawn_offset = None  # Track last tree spawn scroll offset
 
 # Font for displaying acorn count
 font = pygame.font.Font(None, 36)
@@ -575,9 +576,33 @@ while running:
         
         # Box x position is relative to scroll offset
         box_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-        box = Box(box_x, box_y)
-        boxes.append(box)
-        next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
+        
+        # Check separation from last tree spawn
+        box_width = 40
+        min_separation_pixels = 2 * box_width
+        # Convert pixel separation to scroll offset separation
+        min_separation_offset = min_separation_pixels / SCROLL_SPEED
+        
+        if last_tree_spawn_offset is not None:
+            # Check if box would spawn too close to last tree spawn
+            separation = scroll_offset - last_tree_spawn_offset
+            if separation < min_separation_offset:
+                # Delay box spawn to maintain separation
+                next_box_spawn_offset = last_tree_spawn_offset + min_separation_offset
+                # Skip spawning this frame
+                pass
+            else:
+                # Safe to spawn
+                box = Box(box_x, box_y)
+                boxes.append(box)
+                last_box_spawn_offset = scroll_offset
+                next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
+        else:
+            # No previous tree, safe to spawn
+            box = Box(box_x, box_y)
+            boxes.append(box)
+            last_box_spawn_offset = scroll_offset
+            next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
     
     # Spawn new trees randomly on the floor (only if game not over)
     if not squirrel.game_over and scroll_offset >= next_tree_spawn_offset:
@@ -586,12 +611,37 @@ while running:
         # Tree should be placed so its bottom aligns with the top of the soil
         # We'll position it so the bottom of the tree is at soil_y
         tree_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-        # Create a temporary tree to get its height
+        
+        # Create a temporary tree to get its dimensions
         temp_tree = Tree(0, 0)
+        tree_width = temp_tree.width
         tree_y = soil_y - temp_tree.height  # Position tree so bottom is at soil level
-        tree = Tree(tree_x, tree_y)
-        trees.append(tree)
-        next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
+        
+        # Check separation from last box spawn
+        min_separation_pixels = 2 * tree_width
+        # Convert pixel separation to scroll offset separation
+        min_separation_offset = min_separation_pixels / SCROLL_SPEED
+        
+        if last_box_spawn_offset is not None:
+            # Check if tree would spawn too close to last box spawn
+            separation = scroll_offset - last_box_spawn_offset
+            if separation < min_separation_offset:
+                # Delay tree spawn to maintain separation
+                next_tree_spawn_offset = last_box_spawn_offset + min_separation_offset
+                # Skip spawning this frame
+                pass
+            else:
+                # Safe to spawn
+                tree = Tree(tree_x, tree_y)
+                trees.append(tree)
+                last_tree_spawn_offset = scroll_offset
+                next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
+        else:
+            # No previous box, safe to spawn
+            tree = Tree(tree_x, tree_y)
+            trees.append(tree)
+            last_tree_spawn_offset = scroll_offset
+            next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
     
     # Spawn new skunks randomly on the floor (only if game not over)
     if not squirrel.game_over and scroll_offset >= next_skunk_spawn_offset:
@@ -636,6 +686,7 @@ while running:
                     # Acorn hit skunk - defeat the skunk
                     skunk.defeated = True
                     acorn.active = False
+                    score += 1  # Increase score
                     break
             if not acorn.active:
                 acorns_list.remove(acorn)
@@ -645,6 +696,7 @@ while running:
                     # Acorn hit bird - defeat the bird
                     bird.defeated = True
                     acorn.active = False
+                    score += 1  # Increase score
                     break
             if not acorn.active:
                 acorns_list.remove(acorn)
@@ -801,7 +853,13 @@ while running:
     for acorn in acorns_list:
         acorn.draw(screen)
     
-    # Draw acorn count
+    # Draw score (top left)
+    score_text = font.render(f"Point: {score}", True, (0, 0, 0))
+    score_rect = score_text.get_rect()
+    score_rect.topleft = (10, 10)
+    screen.blit(score_text, score_rect)
+    
+    # Draw acorn count (top right)
     acorn_text = font.render(f"Acorns: {acorns}", True, (0, 0, 0))
     text_rect = acorn_text.get_rect()
     text_rect.topright = (SCREEN_WIDTH - 10, 10)
