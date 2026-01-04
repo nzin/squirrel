@@ -57,7 +57,7 @@ class Squirrel:
             self.velocity_y = JUMP_STRENGTH
             self.is_jumping = True
     
-    def update(self, boxes=None):
+    def update(self, boxes=None, clouds=None):
         # Apply gravity
         self.velocity_y += GRAVITY
         
@@ -104,6 +104,23 @@ class Squirrel:
                     else:
                         self.game_over = True
         
+        # Check cloud collisions before moving (similar to boxes, but only landing on top)
+        if clouds:
+            squirrel_rect = pygame.Rect(self.x, new_y, self.width, self.height)
+            for cloud in clouds:
+                if cloud.active and cloud.get_rect().colliderect(squirrel_rect):
+                    cloud_rect = cloud.get_rect()
+                    # Determine collision direction based on previous position
+                    prev_top = self.prev_y
+                    
+                    # Check if landing on top of cloud
+                    if prev_top <= cloud_rect.y and self.velocity_y > 0:
+                        # Squirrel is above or falling onto the cloud - land on top
+                        # Position squirrel so its bottom is at the cloud's top
+                        new_y = cloud_rect.y - self.height
+                        self.velocity_y = 0
+                        self.is_jumping = False
+        
         self.y = new_y
         
         # Check if squirrel is standing on a box (after position update)
@@ -127,8 +144,28 @@ class Squirrel:
                         self.is_jumping = False
                         break
         
-        # Only apply ground collision if not standing on a box
-        if not standing_on_box:
+        # Check if standing on a cloud
+        standing_on_cloud = False
+        if clouds:
+            squirrel_bottom = self.y + self.height
+            squirrel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+            for cloud in clouds:
+                if cloud.active:
+                    cloud_rect = cloud.get_rect()
+                    cloud_top = cloud_rect.y
+                    # Check if squirrel's bottom is on top of the cloud
+                    if (abs(squirrel_bottom - cloud_top) < 5 and  # Within 5 pixels of cloud top
+                        self.x < cloud_rect.x + cloud_rect.width and
+                        self.x + self.width > cloud_rect.x):  # Horizontally overlapping with cloud
+                        standing_on_cloud = True
+                        # Keep squirrel exactly on top of cloud
+                        self.y = cloud_top - self.height
+                        self.velocity_y = 0
+                        self.is_jumping = False
+                        break
+        
+        # Only apply ground collision if not standing on a box or cloud
+        if not standing_on_box and not standing_on_cloud:
             if self.y >= self.ground_y:
                 self.y = self.ground_y
                 self.velocity_y = 0
@@ -251,6 +288,46 @@ class Box:
             text = font.render(text_char, True, (0, 0, 0))
             text_rect = text.get_rect(center=(self.x + self.width // 2, self.y + self.height // 2))
             surface.blit(text, text_rect)
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+class Cloud:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.active = True
+        # Randomly select one of 4 cloud images
+        cloud_images = ["assets/cloud1.png", "assets/cloud2.png", "assets/cloud3.png", "assets/cloud4.png"]
+        cloud_image_path = random.choice(cloud_images)
+        try:
+            self.image = pygame.image.load(cloud_image_path)
+            # Scale cloud to reasonable size
+            cloud_height = 50  # Height of cloud on screen
+            cloud_width = int(self.image.get_width() * (cloud_height / self.image.get_height()))
+            self.image = pygame.transform.scale(self.image, (cloud_width, cloud_height))
+            self.width = cloud_width
+            self.height = cloud_height
+        except pygame.error:
+            # Fallback if image fails to load
+            self.image = None
+            self.width = 150
+            self.height = 50
+    
+    def update(self, scroll_speed):
+        # Clouds scroll with the background
+        self.x -= scroll_speed
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.image:
+                surface.blit(self.image, (self.x, self.y))
+            else:
+                # Fallback: draw a simple cloud shape
+                pygame.draw.ellipse(surface, (255, 255, 255), (self.x, self.y, self.width, self.height))
     
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
@@ -480,6 +557,7 @@ trees = []  # Trees on the floor
 skunks = []  # Skunks on the floor
 birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
+clouds = []  # Clouds in the sky
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
@@ -516,7 +594,7 @@ def reset_game():
     global scroll_offset, acorns, score
     global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
-    global acorns_list, boxes, trees, skunks, birds, popup_acorns
+    global acorns_list, boxes, trees, skunks, birds, popup_acorns, clouds
     
     # Reset game state
     scroll_offset = 0
@@ -536,6 +614,21 @@ def reset_game():
     skunks = []
     birds = []
     popup_acorns = []
+    clouds = []
+    
+    # Initialize clouds for continuous rows
+    # Row 1 at y=300, Row 2 at y=400
+    # Spawn clouds continuously, 10 pixels apart
+    cloud_y_positions = [150, 250]
+    cloud_spacing = 70
+    # Create initial clouds to fill the screen width plus some buffer
+    for cloud_y in cloud_y_positions:
+        x = 0
+        while x < SCREEN_WIDTH + 200:  # Fill screen plus buffer
+            # Create a temporary cloud to get its width
+            temp_cloud = Cloud(x, cloud_y)
+            clouds.append(temp_cloud)
+            x += temp_cloud.width + cloud_spacing
     
     # Reset squirrel
     squirrel.game_over = False
@@ -556,6 +649,20 @@ async def main():
     
     # Initialize random generator with current time for better randomness
     random.seed(time.time())
+    
+    # Initialize clouds for continuous rows
+    # Row 1 at y=300, Row 2 at y=400
+    # Spawn clouds continuously, 10 pixels apart
+    cloud_y_positions = [150, 250]
+    cloud_spacing = 70
+    # Create initial clouds to fill the screen width plus some buffer
+    for cloud_y in cloud_y_positions:
+        x = 0
+        while x < SCREEN_WIDTH + 200:  # Fill screen plus buffer
+            # Create a temporary cloud to get its width
+            temp_cloud = Cloud(x, cloud_y)
+            clouds.append(temp_cloud)
+            x += temp_cloud.width + cloud_spacing
 
     # Initialize Pygame
     pygame.init()
@@ -747,7 +854,7 @@ async def main():
             next_bird_spawn_offset = scroll_offset + random.randint(BIRD_SPAWN_DISTANCE, BIRD_SPAWN_DISTANCE + 600)
         
         # Update game objects
-        squirrel.update(boxes)
+        squirrel.update(boxes, clouds)
         
         # Check if game over was just triggered (from box collision in Squirrel.update)
         if squirrel.game_over and game_over_time is None:
@@ -798,6 +905,30 @@ async def main():
                 bird.update(SCROLL_SPEED)
             if not bird.active:
                 birds.remove(bird)
+        
+        # Update clouds (scroll with background)
+        for cloud in clouds[:]:
+            if not squirrel.game_over:
+                cloud.update(SCROLL_SPEED)
+            if not cloud.active:
+                clouds.remove(cloud)
+        
+        # Spawn new clouds continuously to maintain the rows
+        # Check if we need to add more clouds at the right edge
+        cloud_y_positions = [150, 250]
+        cloud_spacing = 70
+        for cloud_y in cloud_y_positions:
+            # Find the rightmost cloud in this row
+            rightmost_x = -1
+            for cloud in clouds:
+                if cloud.y == cloud_y and cloud.active:
+                    rightmost_x = max(rightmost_x, cloud.x + cloud.width)
+            
+            # If the rightmost cloud is getting close to the screen edge, spawn a new one
+            if rightmost_x < SCREEN_WIDTH + 100:
+                # Create a new cloud
+                temp_cloud = Cloud(rightmost_x + cloud_spacing, cloud_y)
+                clouds.append(temp_cloud)
         
         # Check tree collisions with squirrel (only left side collision triggers game over)
         if not squirrel.game_over:
@@ -921,6 +1052,10 @@ async def main():
         # Draw birds (in the air)
         for bird in birds:
             bird.draw(screen)
+        
+        # Draw clouds
+        for cloud in clouds:
+            cloud.draw(screen)
         
         # Draw boxes
         for box in boxes:
