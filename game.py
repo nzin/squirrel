@@ -303,6 +303,91 @@ class Tree:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class Skunk:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        self.defeated = False  # Track if skunk is defeated
+        self.image_change_time = time.time()
+        self.image_change_interval = 3.0  # Change image every 3 seconds
+        self.current_image_index = 0
+        self.images = []
+        self.width = 80
+        self.height = 80
+        self.animation_start_time = None
+        self.animation_jump_height = 20
+        self.animation_velocity_x = -2.7  # Horizontal velocity when falling
+        self.animation_velocity_y = 0  # Vertical velocity for falling
+        self.initial_y = y  # Store initial floor position
+        self.defeated_floor_y = None  # Floor position when defeated
+        
+        # Load all skunk images
+        for i in range(1, 4):
+            try:
+                img = pygame.image.load(f"assets/skunk_{i}.png")
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.images.append(img)
+            except pygame.error:
+                # Fallback if image fails to load
+                self.images.append(None)
+        
+        if not self.images:
+            self.images = [None] * 3
+    
+    def update(self, scroll_speed):
+        self.prev_x = self.x
+        
+        if self.defeated:
+            # Animate defeated skunk: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the floor position when defeated
+                self.defeated_floor_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
+                self.animation_velocity_y = 0  # Start with no vertical velocity
+            
+            elapsed = time.time() - self.animation_start_time
+            
+            if elapsed < 0.3:
+                # Jump up phase
+                jump_progress = elapsed / 0.3
+                self.y = self.defeated_floor_y - (self.animation_jump_height * (1 - jump_progress))
+                # Move horizontally during jump
+                self.x += self.animation_velocity_x
+            else:
+                # Falling phase - apply gravity and continue falling
+                # Apply gravity to vertical velocity
+                self.animation_velocity_y += GRAVITY
+                # Update position with velocity
+                self.y += self.animation_velocity_y
+                self.x += self.animation_velocity_x
+                # Don't stop at floor - continue falling off screen
+        else:
+            # Normal scrolling
+            self.x -= scroll_speed
+            
+            # Change image randomly every 3 seconds
+            if time.time() - self.image_change_time >= self.image_change_interval:
+                self.current_image_index = random.randint(0, len(self.images) - 1)
+                self.image_change_time = time.time()
+        
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                color = (100, 100, 100) if self.defeated else (50, 50, 50)
+                pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
 # Calculate maximum jump height
 # Using physics: v² = u² + 2as, where v=0 at max height
 # 0 = JUMP_STRENGTH² + 2*GRAVITY*height
@@ -314,9 +399,12 @@ squirrel = Squirrel()
 acorns_list = []
 boxes = []
 trees = []  # Trees on the floor
+skunks = []  # Skunks on the floor
 popup_acorns = []  # Acorns that pop up from boxes
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
+next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
+SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
 
 # Font for displaying acorn count
 font = pygame.font.Font(None, 36)
@@ -416,6 +504,16 @@ while running:
         trees.append(tree)
         next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
     
+    # Spawn new skunks randomly on the floor (only if game not over)
+    if not squirrel.game_over and scroll_offset >= next_skunk_spawn_offset:
+        # Place skunk on the floor (soil)
+        soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+        skunk_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+        skunk_y = soil_y - 80  # Position skunk so bottom is at soil level (skunk height is 80)
+        skunk = Skunk(skunk_x, skunk_y)
+        skunks.append(skunk)
+        next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
+    
     # Update game objects
     squirrel.update(boxes)
     
@@ -423,6 +521,14 @@ while running:
     if not squirrel.game_over:
         for acorn in acorns_list[:]:
             acorn.update()
+            # Check if acorn collides with a skunk
+            acorn_rect = pygame.Rect(acorn.x, acorn.y, acorn.width, acorn.height)
+            for skunk in skunks:
+                if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(acorn_rect):
+                    # Acorn hit skunk - defeat the skunk
+                    skunk.defeated = True
+                    acorn.active = False
+                    break
             if not acorn.active:
                 acorns_list.remove(acorn)
     
@@ -432,6 +538,12 @@ while running:
             tree.update(SCROLL_SPEED)
         if not tree.active:
             trees.remove(tree)
+    
+    # Update skunks
+    for skunk in skunks[:]:
+        skunk.update(SCROLL_SPEED if not squirrel.game_over else 0)
+        if not skunk.active:
+            skunks.remove(skunk)
     
     # Check tree collisions with squirrel (only left side collision triggers game over)
     if not squirrel.game_over:
@@ -446,6 +558,19 @@ while running:
                 # Check if squirrel was to the left and now is colliding from the left side
                 if prev_tree_left >= squirrel.x + squirrel.width and tree_left <= squirrel.x + squirrel.width:
                     # Game over - hit left side of tree
+                    squirrel.game_over = True
+                    break
+        
+        # Check skunk collisions with squirrel (only left side collision triggers game over)
+        for skunk in skunks:
+            if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(squirrel_rect):
+                # Check if squirrel hit the left side of the skunk
+                skunk_rect = skunk.get_rect()
+                skunk_left = skunk_rect.x
+                prev_skunk_left = skunk.prev_x
+                # If squirrel's right side hits the skunk's left side, game over
+                if prev_skunk_left >= squirrel.x + squirrel.width and skunk_left <= squirrel.x + squirrel.width:
+                    # Game over - hit left side of skunk
                     squirrel.game_over = True
                     break
     
@@ -515,6 +640,10 @@ while running:
     # Draw trees (on the floor)
     for tree in trees:
         tree.draw(screen)
+    
+    # Draw skunks (on the floor)
+    for skunk in skunks:
+        skunk.draw(screen)
     
     # Draw boxes
     for box in boxes:
