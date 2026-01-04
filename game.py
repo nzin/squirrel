@@ -103,16 +103,18 @@ class Squirrel:
                             # We'll detect the collision again next frame
                             pass
                     # Check if landing on top of box
-                    elif prev_top <= box_rect.y + box_rect.height or self.velocity_y > 0:
+                    elif prev_top <= box_rect.y and self.velocity_y > 0:
                         # Squirrel is above or falling onto the box - land on top
-                        new_y = box_rect.y + box_rect.height
+                        # Position squirrel so its bottom is at the box's top
+                        new_y = box_rect.y - self.height
                         self.velocity_y = 0
                         self.is_jumping = False
                     else:
                         # Horizontal overlap - determine best position
                         # If moving down, land on top
                         if self.velocity_y > 0:
-                            new_y = box_rect.y + box_rect.height
+                            # Position squirrel so its bottom is at the box's top
+                            new_y = box_rect.y + box_rect.height - self.height
                             self.velocity_y = 0
                             self.is_jumping = False
                         # If moving up, stop at bottom
@@ -122,11 +124,33 @@ class Squirrel:
         
         self.y = new_y
         
-        # Check ground collision
-        if self.y >= self.ground_y:
-            self.y = self.ground_y
-            self.velocity_y = 0
-            self.is_jumping = False
+        # Check if squirrel is standing on a box (after position update)
+        standing_on_box = False
+        if boxes:
+            squirrel_bottom = self.y + self.height
+            squirrel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+            for box in boxes:
+                if box.active:
+                    box_rect = box.get_rect()
+                    box_bottom = box_rect.y + box_rect.height
+                    # Check if squirrel's bottom is on top of the box
+                    # Allow small tolerance for floating point precision
+                    if (abs(squirrel_bottom - box_bottom) < 5 and  # Within 5 pixels of box top
+                        self.x < box_rect.x + box_rect.width and
+                        self.x + self.width > box_rect.x):  # Horizontally overlapping with box
+                        standing_on_box = True
+                        # Keep squirrel exactly on top of box
+                        self.y = box_bottom - self.height
+                        self.velocity_y = 0
+                        self.is_jumping = False
+                        break
+        
+        # Only apply ground collision if not standing on a box
+        if not standing_on_box:
+            if self.y >= self.ground_y:
+                self.y = self.ground_y
+                self.velocity_y = 0
+                self.is_jumping = False
     
     def draw(self, surface):
         if self.image:
