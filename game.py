@@ -60,7 +60,7 @@ class Squirrel:
             self.rotated_image = None
     
     def jump(self):
-        if not self.is_jumping:
+        if not self.is_jumping and not self.game_over:
             self.velocity_y = JUMP_STRENGTH
             self.is_jumping = True
     
@@ -527,9 +527,10 @@ while running:
             running = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
-                squirrel.jump()
+                if not squirrel.game_over:
+                    squirrel.jump()
             elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                if acorns > 0:
+                if acorns > 0 and not squirrel.game_over:
                     # Throw acorn from squirrel position
                     acorn = Acorn(squirrel.x + squirrel.width, squirrel.y + squirrel.height // 2)
                     acorns_list.append(acorn)
@@ -854,7 +855,7 @@ while running:
         acorn.draw(screen)
     
     # Draw score (top left)
-    score_text = font.render(f"Point: {score}", True, (0, 0, 0))
+    score_text = font.render(f"Points: {score}", True, (0, 0, 0))
     score_rect = score_text.get_rect()
     score_rect.topleft = (10, 10)
     screen.blit(score_text, score_rect)
