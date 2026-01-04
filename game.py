@@ -23,6 +23,7 @@ SQUIRREL_COLOR = (160, 82, 45)
 ACORN_COLOR = (139, 90, 43)
 BOX_COLOR = (200, 150, 100)
 BOX_SPAWN_DISTANCE = 1200  # Distance between box spawns
+TREE_SPAWN_DISTANCE = 1500  # Distance between tree spawns
 
 # Create the screen
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -43,6 +44,7 @@ class Squirrel:
         self.is_jumping = False
         self.ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
         self.prev_y = self.y  # Track previous position for collision detection
+        self.prev_x = self.x  # Track previous x position for collision detection
         self.game_over = False  # Game over state
         self.rotated_image = None  # Rotated image for game over
         # Load squirrel image
@@ -67,6 +69,7 @@ class Squirrel:
         
         # Store previous position for collision detection
         self.prev_y = self.y
+        self.prev_x = self.x
         new_y = self.y + self.velocity_y
         
         # Check box collisions before moving
@@ -81,14 +84,6 @@ class Squirrel:
                     box_bottom = box_rect.y + box_rect.height
                     box_top = box_rect.y
                     
-                    print("prev_bottom", prev_bottom)
-                    print("prev_top", prev_top)
-                    print("box_bottom", box_bottom)
-                    print("box_top", box_top)
-                    print("new_y", new_y)
-                    print("self.velocity_y", self.velocity_y)
-                    print("self.is_jumping", self.is_jumping)
-                    print("box.should_collect", box.should_collect)
                     # Check if hitting from below (jumping into box from bottom)
                     # The squirrel must be completely below the box and moving upward
                     if prev_bottom >= box_top and self.velocity_y < 0:
@@ -268,6 +263,46 @@ class Box:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class Tree:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        # Load tree image
+        try:
+            self.image = pygame.image.load("assets/tree2.png")
+            # Scale tree to reasonable size (adjust as needed)
+            tree_height = 75  # Height of tree on screen
+            tree_width = int(self.image.get_width() * (tree_height / self.image.get_height()))
+            self.image = pygame.transform.scale(self.image, (tree_width, tree_height))
+            self.width = tree_width
+            self.height = tree_height
+        except pygame.error:
+            # Fallback if image fails to load
+            self.image = None
+            self.width = 30
+            self.height = 75
+    
+    def update(self, scroll_speed):
+        # Trees scroll with the background
+        self.prev_x = self.x
+        self.x -= scroll_speed
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.image:
+                surface.blit(self.image, (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                pygame.draw.rect(surface, (34, 139, 34), (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
 # Calculate maximum jump height
 # Using physics: v² = u² + 2as, where v=0 at max height
 # 0 = JUMP_STRENGTH² + 2*GRAVITY*height
@@ -278,8 +313,10 @@ MAX_JUMP_HEIGHT = abs(JUMP_STRENGTH * JUMP_STRENGTH) / (2 * GRAVITY)  # ~140 pix
 squirrel = Squirrel()
 acorns_list = []
 boxes = []
+trees = []  # Trees on the floor
 popup_acorns = []  # Acorns that pop up from boxes
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
+next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 
 # Font for displaying acorn count
 font = pygame.font.Font(None, 36)
@@ -365,6 +402,20 @@ while running:
         boxes.append(box)
         next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
     
+    # Spawn new trees randomly on the floor (only if game not over)
+    if not squirrel.game_over and scroll_offset >= next_tree_spawn_offset:
+        # Place tree on the floor (soil)
+        soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+        # Tree should be placed so its bottom aligns with the top of the soil
+        # We'll position it so the bottom of the tree is at soil_y
+        tree_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+        # Create a temporary tree to get its height
+        temp_tree = Tree(0, 0)
+        tree_y = soil_y - temp_tree.height  # Position tree so bottom is at soil level
+        tree = Tree(tree_x, tree_y)
+        trees.append(tree)
+        next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
+    
     # Update game objects
     squirrel.update(boxes)
     
@@ -374,6 +425,29 @@ while running:
             acorn.update()
             if not acorn.active:
                 acorns_list.remove(acorn)
+    
+    # Update trees (only if game not over)
+    for tree in trees[:]:
+        if not squirrel.game_over:
+            tree.update(SCROLL_SPEED)
+        if not tree.active:
+            trees.remove(tree)
+    
+    # Check tree collisions with squirrel (only left side collision triggers game over)
+    if not squirrel.game_over:
+        squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
+        for tree in trees:
+            if tree.active and tree.get_rect().colliderect(squirrel_rect):
+                # Check if squirrel hit the left side of the tree
+                tree_rect = tree.get_rect()
+                tree_left = tree_rect.x
+                prev_tree_left = tree.prev_x
+                # If squirrel's right side hits the tree's left side, game over
+                # Check if squirrel was to the left and now is colliding from the left side
+                if prev_tree_left >= squirrel.x + squirrel.width and tree_left <= squirrel.x + squirrel.width:
+                    # Game over - hit left side of tree
+                    squirrel.game_over = True
+                    break
     
     # Update boxes and check collection collisions (only if game not over)
     squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
@@ -437,6 +511,10 @@ while running:
                 pygame.draw.line(screen, DARK_BROWN, 
                                (soil_x + j, soil_y), 
                                (soil_x + j, SCREEN_HEIGHT), 1)
+    
+    # Draw trees (on the floor)
+    for tree in trees:
+        tree.draw(screen)
     
     # Draw boxes
     for box in boxes:
