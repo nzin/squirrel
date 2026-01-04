@@ -2,9 +2,7 @@ import pygame
 import sys
 import random
 import time
-
-# Initialize Pygame
-pygame.init()
+import asyncio
 
 # Constants
 SCREEN_WIDTH = 800
@@ -24,11 +22,6 @@ ACORN_COLOR = (139, 90, 43)
 BOX_COLOR = (200, 150, 100)
 BOX_SPAWN_DISTANCE = 1200  # Distance between box spawns
 TREE_SPAWN_DISTANCE = 1500  # Distance between tree spawns
-
-# Create the screen
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Squirrel Game")
-clock = pygame.time.Clock()
 
 # Game state
 acorns = 3
@@ -519,357 +512,376 @@ except pygame.error:
     background_down = None
 
 # Main game loop
-running = True
-while running:
-    # Handle events
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                if not squirrel.game_over:
-                    squirrel.jump()
-            elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                if acorns > 0 and not squirrel.game_over:
-                    # Throw acorn from squirrel position
-                    acorn = Acorn(squirrel.x + squirrel.width, squirrel.y + squirrel.height // 2)
-                    acorns_list.append(acorn)
-                    acorns -= 1
+async def main():
+    global running, scroll_offset, acorns, score
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset
+    global last_box_spawn_offset, last_tree_spawn_offset
     
-    # Update scroll offset (only if game not over)
-    if not squirrel.game_over:
-        scroll_offset += SCROLL_SPEED
+    # Initialize Pygame
+    pygame.init()
     
-    # Spawn new boxes randomly (only if game not over)
-    if not squirrel.game_over and scroll_offset >= next_box_spawn_offset:
-        # Calculate box placement constraints
-        # Squirrel's ground position (top of squirrel when on ground)
-        squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
-        box_height = 40  # Box height (from Box class)
+    # Create the screen
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Squirrel Game")
+    clock = pygame.time.Clock()
+    
+    running = True
+    while running:
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    if not squirrel.game_over:
+                        squirrel.jump()
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    if acorns > 0 and not squirrel.game_over:
+                        # Throw acorn from squirrel position
+                        acorn = Acorn(squirrel.x + squirrel.width, squirrel.y + squirrel.height // 2)
+                        acorns_list.append(acorn)
+                        acorns -= 1
         
-        # Box bottom (box.y + box.height) must be:
-        # 1. Above the squirrel's height: box.y + box.height < squirrel_ground_y
-        #    Therefore: box.y < squirrel_ground_y - box.height
-        # 2. Within maximum jump reach: box.y + box.height >= squirrel_ground_y - MAX_JUMP_HEIGHT
-        #    Therefore: box.y >= squirrel_ground_y - MAX_JUMP_HEIGHT - box.height
+        # Update scroll offset (only if game not over)
+        if not squirrel.game_over:
+            scroll_offset += SCROLL_SPEED
         
-        # Minimum box y: highest reachable point (box bottom at max jump height)
-        min_box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
-        
-        # Maximum box y: just above squirrel (box bottom just above squirrel's top)
-        max_box_y = squirrel_ground_y - box_height - 1  # -1 to ensure it's above
-        
-        # Ensure boxes are within valid range
-        if min_box_y < max_box_y:
-            box_y = random.randint(int(min_box_y), int(max_box_y))
-        else:
-            # Fallback: place box at a safe height
-            box_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - box_height)
-        
-        # Verify box bottom is in correct range
-        box_bottom = box_y + box_height
-        if box_bottom >= squirrel_ground_y:
-            # Adjust to ensure box bottom is above squirrel
-            box_y = squirrel_ground_y - box_height - 1
-        elif box_bottom < squirrel_ground_y - MAX_JUMP_HEIGHT:
-            # Adjust to ensure box is reachable
-            box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
-        
-        # Box x position is relative to scroll offset
-        box_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-        
-        # Check separation from last tree spawn
-        box_width = 40
-        min_separation_pixels = 2 * box_width
-        # Convert pixel separation to scroll offset separation
-        min_separation_offset = min_separation_pixels / SCROLL_SPEED
-        
-        if last_tree_spawn_offset is not None:
-            # Check if box would spawn too close to last tree spawn
-            separation = scroll_offset - last_tree_spawn_offset
-            if separation < min_separation_offset:
-                # Delay box spawn to maintain separation
-                next_box_spawn_offset = last_tree_spawn_offset + min_separation_offset
-                # Skip spawning this frame
-                pass
+        # Spawn new boxes randomly (only if game not over)
+        if not squirrel.game_over and scroll_offset >= next_box_spawn_offset:
+            # Calculate box placement constraints
+            # Squirrel's ground position (top of squirrel when on ground)
+            squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
+            box_height = 40  # Box height (from Box class)
+            
+            # Box bottom (box.y + box.height) must be:
+            # 1. Above the squirrel's height: box.y + box.height < squirrel_ground_y
+            #    Therefore: box.y < squirrel_ground_y - box.height
+            # 2. Within maximum jump reach: box.y + box.height >= squirrel_ground_y - MAX_JUMP_HEIGHT
+            #    Therefore: box.y >= squirrel_ground_y - MAX_JUMP_HEIGHT - box.height
+            
+            # Minimum box y: highest reachable point (box bottom at max jump height)
+            min_box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
+            
+            # Maximum box y: just above squirrel (box bottom just above squirrel's top)
+            max_box_y = squirrel_ground_y - box_height - 1  # -1 to ensure it's above
+            
+            # Ensure boxes are within valid range
+            if min_box_y < max_box_y:
+                box_y = random.randint(int(min_box_y), int(max_box_y))
             else:
-                # Safe to spawn
+                # Fallback: place box at a safe height
+                box_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - box_height)
+            
+            # Verify box bottom is in correct range
+            box_bottom = box_y + box_height
+            if box_bottom >= squirrel_ground_y:
+                # Adjust to ensure box bottom is above squirrel
+                box_y = squirrel_ground_y - box_height - 1
+            elif box_bottom < squirrel_ground_y - MAX_JUMP_HEIGHT:
+                # Adjust to ensure box is reachable
+                box_y = squirrel_ground_y - MAX_JUMP_HEIGHT - box_height
+            
+            # Box x position is relative to scroll offset
+            box_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+            
+            # Check separation from last tree spawn
+            box_width = 40
+            min_separation_pixels = 2 * box_width
+            # Convert pixel separation to scroll offset separation
+            min_separation_offset = min_separation_pixels / SCROLL_SPEED
+            
+            if last_tree_spawn_offset is not None:
+                # Check if box would spawn too close to last tree spawn
+                separation = scroll_offset - last_tree_spawn_offset
+                if separation < min_separation_offset:
+                    # Delay box spawn to maintain separation
+                    next_box_spawn_offset = last_tree_spawn_offset + min_separation_offset
+                    # Skip spawning this frame
+                    pass
+                else:
+                    # Safe to spawn
+                    box = Box(box_x, box_y)
+                    boxes.append(box)
+                    last_box_spawn_offset = scroll_offset
+                    next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
+            else:
+                # No previous tree, safe to spawn
                 box = Box(box_x, box_y)
                 boxes.append(box)
                 last_box_spawn_offset = scroll_offset
                 next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
-        else:
-            # No previous tree, safe to spawn
-            box = Box(box_x, box_y)
-            boxes.append(box)
-            last_box_spawn_offset = scroll_offset
-            next_box_spawn_offset = scroll_offset + random.randint(BOX_SPAWN_DISTANCE, BOX_SPAWN_DISTANCE + 400)
-    
-    # Spawn new trees randomly on the floor (only if game not over)
-    if not squirrel.game_over and scroll_offset >= next_tree_spawn_offset:
-        # Place tree on the floor (soil)
-        soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
-        # Tree should be placed so its bottom aligns with the top of the soil
-        # We'll position it so the bottom of the tree is at soil_y
-        tree_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
         
-        # Create a temporary tree to get its dimensions
-        temp_tree = Tree(0, 0)
-        tree_width = temp_tree.width
-        tree_y = soil_y - temp_tree.height  # Position tree so bottom is at soil level
-        
-        # Check separation from last box spawn
-        min_separation_pixels = 2 * tree_width
-        # Convert pixel separation to scroll offset separation
-        min_separation_offset = min_separation_pixels / SCROLL_SPEED
-        
-        if last_box_spawn_offset is not None:
-            # Check if tree would spawn too close to last box spawn
-            separation = scroll_offset - last_box_spawn_offset
-            if separation < min_separation_offset:
-                # Delay tree spawn to maintain separation
-                next_tree_spawn_offset = last_box_spawn_offset + min_separation_offset
-                # Skip spawning this frame
-                pass
+        # Spawn new trees randomly on the floor (only if game not over)
+        if not squirrel.game_over and scroll_offset >= next_tree_spawn_offset:
+            # Place tree on the floor (soil)
+            soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+            # Tree should be placed so its bottom aligns with the top of the soil
+            # We'll position it so the bottom of the tree is at soil_y
+            tree_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+            
+            # Create a temporary tree to get its dimensions
+            temp_tree = Tree(0, 0)
+            tree_width = temp_tree.width
+            tree_y = soil_y - temp_tree.height  # Position tree so bottom is at soil level
+            
+            # Check separation from last box spawn
+            min_separation_pixels = 2 * tree_width
+            # Convert pixel separation to scroll offset separation
+            min_separation_offset = min_separation_pixels / SCROLL_SPEED
+            
+            if last_box_spawn_offset is not None:
+                # Check if tree would spawn too close to last box spawn
+                separation = scroll_offset - last_box_spawn_offset
+                if separation < min_separation_offset:
+                    # Delay tree spawn to maintain separation
+                    next_tree_spawn_offset = last_box_spawn_offset + min_separation_offset
+                    # Skip spawning this frame
+                    pass
+                else:
+                    # Safe to spawn
+                    tree = Tree(tree_x, tree_y)
+                    trees.append(tree)
+                    last_tree_spawn_offset = scroll_offset
+                    next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
             else:
-                # Safe to spawn
+                # No previous box, safe to spawn
                 tree = Tree(tree_x, tree_y)
                 trees.append(tree)
                 last_tree_spawn_offset = scroll_offset
                 next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
-        else:
-            # No previous box, safe to spawn
-            tree = Tree(tree_x, tree_y)
-            trees.append(tree)
-            last_tree_spawn_offset = scroll_offset
-            next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
-    
-    # Spawn new skunks randomly on the floor (only if game not over)
-    if not squirrel.game_over and scroll_offset >= next_skunk_spawn_offset:
-        # Place skunk on the floor (soil)
-        soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
-        skunk_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-        skunk_y = soil_y - 80  # Position skunk so bottom is at soil level (skunk height is 80)
-        skunk = Skunk(skunk_x, skunk_y)
-        skunks.append(skunk)
-        next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
-    
-    # Spawn new birds randomly in the air (only if game not over)
-    if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
-        # Calculate bird placement (similar to boxes - in the air, reachable by jumping)
-        squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
-        bird_height = 40  # Bird height
-        # Bird bottom must be above squirrel and within jump reach
-        min_bird_y = squirrel_ground_y - MAX_JUMP_HEIGHT - bird_height
-        max_bird_y = squirrel_ground_y - bird_height - 1
         
-        if min_bird_y < max_bird_y:
-            bird_y = random.randint(int(min_bird_y), int(max_bird_y))
-        else:
-            bird_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - bird_height)
+        # Spawn new skunks randomly on the floor (only if game not over)
+        if not squirrel.game_over and scroll_offset >= next_skunk_spawn_offset:
+            # Place skunk on the floor (soil)
+            soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+            skunk_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+            skunk_y = soil_y - 80  # Position skunk so bottom is at soil level (skunk height is 80)
+            skunk = Skunk(skunk_x, skunk_y)
+            skunks.append(skunk)
+            next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
         
-        bird_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-        bird = Bird(bird_x, bird_y)
-        birds.append(bird)
-        next_bird_spawn_offset = scroll_offset + random.randint(BIRD_SPAWN_DISTANCE, BIRD_SPAWN_DISTANCE + 600)
-    
-    # Update game objects
-    squirrel.update(boxes)
-    
-    # Update acorns (only if game not over)
-    if not squirrel.game_over:
-        for acorn in acorns_list[:]:
-            acorn.update()
-            # Check if acorn collides with a skunk or bird
-            acorn_rect = pygame.Rect(acorn.x, acorn.y, acorn.width, acorn.height)
+        # Spawn new birds randomly in the air (only if game not over)
+        if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
+            # Calculate bird placement (similar to boxes - in the air, reachable by jumping)
+            squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
+            bird_height = 40  # Bird height
+            # Bird bottom must be above squirrel and within jump reach
+            min_bird_y = squirrel_ground_y - MAX_JUMP_HEIGHT - bird_height
+            max_bird_y = squirrel_ground_y - bird_height - 1
+            
+            if min_bird_y < max_bird_y:
+                bird_y = random.randint(int(min_bird_y), int(max_bird_y))
+            else:
+                bird_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - bird_height)
+            
+            bird_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+            bird = Bird(bird_x, bird_y)
+            birds.append(bird)
+            next_bird_spawn_offset = scroll_offset + random.randint(BIRD_SPAWN_DISTANCE, BIRD_SPAWN_DISTANCE + 600)
+        
+        # Update game objects
+        squirrel.update(boxes)
+        
+        # Update acorns (only if game not over)
+        if not squirrel.game_over:
+            for acorn in acorns_list[:]:
+                acorn.update()
+                # Check if acorn collides with a skunk or bird
+                acorn_rect = pygame.Rect(acorn.x, acorn.y, acorn.width, acorn.height)
+                for skunk in skunks:
+                    if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(acorn_rect):
+                        # Acorn hit skunk - defeat the skunk
+                        skunk.defeated = True
+                        acorn.active = False
+                        score += 1  # Increase score
+                        break
+                if not acorn.active:
+                    acorns_list.remove(acorn)
+                    continue
+                for bird in birds:
+                    if not bird.defeated and bird.active and bird.get_rect().colliderect(acorn_rect):
+                        # Acorn hit bird - defeat the bird
+                        bird.defeated = True
+                        acorn.active = False
+                        score += 1  # Increase score
+                        break
+                if not acorn.active:
+                    acorns_list.remove(acorn)
+        
+        # Update trees (only if game not over)
+        for tree in trees[:]:
+            if not squirrel.game_over:
+                tree.update(SCROLL_SPEED)
+            if not tree.active:
+                trees.remove(tree)
+        
+        # Update skunks
+        for skunk in skunks[:]:
+            skunk.update(SCROLL_SPEED if not squirrel.game_over else 0)
+            if not skunk.active:
+                skunks.remove(skunk)
+        
+        # Update birds (only if game not over)
+        for bird in birds[:]:
+            if not squirrel.game_over:
+                bird.update(SCROLL_SPEED)
+            if not bird.active:
+                birds.remove(bird)
+        
+        # Check tree collisions with squirrel (only left side collision triggers game over)
+        if not squirrel.game_over:
+            squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
+            for tree in trees:
+                if tree.active and tree.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the tree
+                    tree_rect = tree.get_rect()
+                    tree_left = tree_rect.x
+                    prev_tree_left = tree.prev_x
+                    # If squirrel's right side hits the tree's left side, game over
+                    # Check if squirrel was to the left and now is colliding from the left side
+                    if prev_tree_left >= squirrel.x + squirrel.width and tree_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of tree
+                        squirrel.game_over = True
+                        break
+            
+            # Check skunk collisions with squirrel (only left side collision triggers game over)
             for skunk in skunks:
-                if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(acorn_rect):
-                    # Acorn hit skunk - defeat the skunk
-                    skunk.defeated = True
-                    acorn.active = False
-                    score += 1  # Increase score
-                    break
-            if not acorn.active:
-                acorns_list.remove(acorn)
-                continue
+                if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the skunk
+                    skunk_rect = skunk.get_rect()
+                    skunk_left = skunk_rect.x
+                    prev_skunk_left = skunk.prev_x
+                    # If squirrel's right side hits the skunk's left side, game over
+                    if prev_skunk_left >= squirrel.x + squirrel.width and skunk_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of skunk
+                        squirrel.game_over = True
+                        break
+            
+            # Check bird collisions with squirrel (only left side collision triggers game over)
             for bird in birds:
-                if not bird.defeated and bird.active and bird.get_rect().colliderect(acorn_rect):
-                    # Acorn hit bird - defeat the bird
-                    bird.defeated = True
-                    acorn.active = False
-                    score += 1  # Increase score
-                    break
-            if not acorn.active:
-                acorns_list.remove(acorn)
-    
-    # Update trees (only if game not over)
-    for tree in trees[:]:
-        if not squirrel.game_over:
-            tree.update(SCROLL_SPEED)
-        if not tree.active:
-            trees.remove(tree)
-    
-    # Update skunks
-    for skunk in skunks[:]:
-        skunk.update(SCROLL_SPEED if not squirrel.game_over else 0)
-        if not skunk.active:
-            skunks.remove(skunk)
-    
-    # Update birds (only if game not over)
-    for bird in birds[:]:
-        if not squirrel.game_over:
-            bird.update(SCROLL_SPEED)
-        if not bird.active:
-            birds.remove(bird)
-    
-    # Check tree collisions with squirrel (only left side collision triggers game over)
-    if not squirrel.game_over:
+                if not bird.defeated and bird.active and bird.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the bird
+                    bird_rect = bird.get_rect()
+                    bird_left = bird_rect.x
+                    prev_bird_left = bird.prev_x
+                    # If squirrel's right side hits the bird's left side, game over
+                    if prev_bird_left >= squirrel.x + squirrel.width and bird_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of bird
+                        squirrel.game_over = True
+                        break
+        
+        # Update boxes and check collection collisions (only if game not over)
         squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
-        for tree in trees:
-            if tree.active and tree.get_rect().colliderect(squirrel_rect):
-                # Check if squirrel hit the left side of the tree
-                tree_rect = tree.get_rect()
-                tree_left = tree_rect.x
-                prev_tree_left = tree.prev_x
-                # If squirrel's right side hits the tree's left side, game over
-                # Check if squirrel was to the left and now is colliding from the left side
-                if prev_tree_left >= squirrel.x + squirrel.width and tree_left <= squirrel.x + squirrel.width:
-                    # Game over - hit left side of tree
-                    squirrel.game_over = True
-                    break
+        for box in boxes[:]:
+            if not squirrel.game_over:
+                box.update(SCROLL_SPEED)
+            if not box.active:
+                boxes.remove(box)
+            elif not box.collected:
+                # Check if box was marked for collection (squirrel's top hit box's bottom)
+                if box.should_collect:
+                    # Squirrel collected the box by hitting with its top at the box's bottom
+                    box.collected = True
+                    box.should_collect = False  # Reset flag
+                    acorns_gained = random.randint(1, 3)
+                    acorns += acorns_gained
+                    # Create popup acorns above the box
+                    for i in range(acorns_gained):
+                        # Spread them out horizontally
+                        offset_x = (i - (acorns_gained - 1) / 2) * 25
+                        popup = PopupAcorn(box.x, box.y, box.width, offset_x)
+                        popup_acorns.append(popup)
+                elif box.get_rect().colliderect(squirrel_rect):
+                    # Reset collection flag if not hitting from below
+                    box.should_collect = False
         
-        # Check skunk collisions with squirrel (only left side collision triggers game over)
-        for skunk in skunks:
-            if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(squirrel_rect):
-                # Check if squirrel hit the left side of the skunk
-                skunk_rect = skunk.get_rect()
-                skunk_left = skunk_rect.x
-                prev_skunk_left = skunk.prev_x
-                # If squirrel's right side hits the skunk's left side, game over
-                if prev_skunk_left >= squirrel.x + squirrel.width and skunk_left <= squirrel.x + squirrel.width:
-                    # Game over - hit left side of skunk
-                    squirrel.game_over = True
-                    break
-        
-        # Check bird collisions with squirrel (only left side collision triggers game over)
-        for bird in birds:
-            if not bird.defeated and bird.active and bird.get_rect().colliderect(squirrel_rect):
-                # Check if squirrel hit the left side of the bird
-                bird_rect = bird.get_rect()
-                bird_left = bird_rect.x
-                prev_bird_left = bird.prev_x
-                # If squirrel's right side hits the bird's left side, game over
-                if prev_bird_left >= squirrel.x + squirrel.width and bird_left <= squirrel.x + squirrel.width:
-                    # Game over - hit left side of bird
-                    squirrel.game_over = True
-                    break
-    
-    # Update boxes and check collection collisions (only if game not over)
-    squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
-    for box in boxes[:]:
-        if not squirrel.game_over:
-            box.update(SCROLL_SPEED)
-        if not box.active:
-            boxes.remove(box)
-        elif not box.collected:
-            # Check if box was marked for collection (squirrel's top hit box's bottom)
-            if box.should_collect:
-                # Squirrel collected the box by hitting with its top at the box's bottom
-                box.collected = True
-                box.should_collect = False  # Reset flag
-                acorns_gained = random.randint(1, 3)
-                acorns += acorns_gained
-                # Create popup acorns above the box
-                for i in range(acorns_gained):
-                    # Spread them out horizontally
-                    offset_x = (i - (acorns_gained - 1) / 2) * 25
-                    popup = PopupAcorn(box.x, box.y, box.width, offset_x)
-                    popup_acorns.append(popup)
-            elif box.get_rect().colliderect(squirrel_rect):
-                # Reset collection flag if not hitting from below
-                box.should_collect = False
-    
-    # Update popup acorns (only if game not over)
-    for popup in popup_acorns[:]:
-        if not squirrel.game_over:
-            popup.update(SCROLL_SPEED)
-        if not popup.active:
-            popup_acorns.remove(popup)
+        # Update popup acorns (only if game not over)
+        for popup in popup_acorns[:]:
+            if not squirrel.game_over:
+                popup.update(SCROLL_SPEED)
+            if not popup.active:
+                popup_acorns.remove(popup)
     
     # Draw everything
     # Draw scrolling upper background (sky area above soil)
-    # Scrolling stops automatically when game_over because scroll_offset stops updating
-    if background_up:
-        up_offset = scroll_offset % background_up.get_width()
-        for i in range(-1, 3):
-            bg_x = (i * background_up.get_width()) - up_offset
-            screen.blit(background_up, (bg_x, 0))
-    else:
-        # Fallback to solid color if image fails to load
-        pygame.draw.rect(screen, SKY_BLUE, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SOIL_HEIGHT))
+        # Scrolling stops automatically when game_over because scroll_offset stops updating
+        if background_up:
+            up_offset = scroll_offset % background_up.get_width()
+            for i in range(-1, 3):
+                bg_x = (i * background_up.get_width()) - up_offset
+                screen.blit(background_up, (bg_x, 0))
+        else:
+            # Fallback to solid color if image fails to load
+            pygame.draw.rect(screen, SKY_BLUE, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SOIL_HEIGHT))
     
-    # Draw scrolling lower background (ground area below SOIL_HEIGHT)
-    # Scrolling stops automatically when game_over because scroll_offset stops updating
-    soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
-    if background_down:
-        down_offset = scroll_offset % background_down.get_width()
-        for i in range(-1, 3):
-            bg_x = (i * background_down.get_width()) - down_offset
-            screen.blit(background_down, (bg_x, soil_y))
-    else:
-        # Fallback: Draw scrolling soil (ground) if image fails to load
-        for i in range(-1, 3):
-            soil_x = (i * SCREEN_WIDTH) - (scroll_offset % SCREEN_WIDTH)
-            pygame.draw.rect(screen, BROWN, (soil_x, soil_y, SCREEN_WIDTH, SOIL_HEIGHT))
-            # Add some texture
-            for j in range(0, SCREEN_WIDTH, 20):
-                pygame.draw.line(screen, DARK_BROWN, 
-                               (soil_x + j, soil_y), 
-                               (soil_x + j, SCREEN_HEIGHT), 1)
+        # Draw scrolling lower background (ground area below SOIL_HEIGHT)
+        # Scrolling stops automatically when game_over because scroll_offset stops updating
+        soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+        if background_down:
+            down_offset = scroll_offset % background_down.get_width()
+            for i in range(-1, 3):
+                bg_x = (i * background_down.get_width()) - down_offset
+                screen.blit(background_down, (bg_x, soil_y))
+        else:
+            # Fallback: Draw scrolling soil (ground) if image fails to load
+            for i in range(-1, 3):
+                soil_x = (i * SCREEN_WIDTH) - (scroll_offset % SCREEN_WIDTH)
+                pygame.draw.rect(screen, BROWN, (soil_x, soil_y, SCREEN_WIDTH, SOIL_HEIGHT))
+                # Add some texture
+                for j in range(0, SCREEN_WIDTH, 20):
+                    pygame.draw.line(screen, DARK_BROWN, 
+                                   (soil_x + j, soil_y), 
+                                   (soil_x + j, SCREEN_HEIGHT), 1)
     
-    # Draw trees (on the floor)
-    for tree in trees:
-        tree.draw(screen)
-    
-    # Draw skunks (on the floor)
-    for skunk in skunks:
-        skunk.draw(screen)
-    
-    # Draw birds (in the air)
-    for bird in birds:
-        bird.draw(screen)
-    
-    # Draw boxes
-    for box in boxes:
-        box.draw(screen)
-    
-    # Draw popup acorns (above boxes)
-    for popup in popup_acorns:
-        popup.draw(screen)
-    
-    # Draw squirrel
-    squirrel.draw(screen)
-    
-    # Draw acorns (thrown acorns)
-    for acorn in acorns_list:
-        acorn.draw(screen)
+        # Draw trees (on the floor)
+        for tree in trees:
+            tree.draw(screen)
+        
+        # Draw skunks (on the floor)
+        for skunk in skunks:
+            skunk.draw(screen)
+        
+        # Draw birds (in the air)
+        for bird in birds:
+            bird.draw(screen)
+        
+        # Draw boxes
+        for box in boxes:
+            box.draw(screen)
+        
+        # Draw popup acorns (above boxes)
+        for popup in popup_acorns:
+            popup.draw(screen)
+        
+        # Draw squirrel
+        squirrel.draw(screen)
+        
+        # Draw acorns (thrown acorns)
+        for acorn in acorns_list:
+            acorn.draw(screen)
     
     # Draw score (top left)
-    score_text = font.render(f"Points: {score}", True, (0, 0, 0))
-    score_rect = score_text.get_rect()
-    score_rect.topleft = (10, 10)
-    screen.blit(score_text, score_rect)
+        score_text = font.render(f"Points: {score}", True, (0, 0, 0))
+        score_rect = score_text.get_rect()
+        score_rect.topleft = (10, 10)
+        screen.blit(score_text, score_rect)
     
     # Draw acorn count (top right)
-    acorn_text = font.render(f"Acorns: {acorns}", True, (0, 0, 0))
-    text_rect = acorn_text.get_rect()
-    text_rect.topright = (SCREEN_WIDTH - 10, 10)
-    screen.blit(acorn_text, text_rect)
+        acorn_text = font.render(f"Acorns: {acorns}", True, (0, 0, 0))
+        text_rect = acorn_text.get_rect()
+        text_rect.topright = (SCREEN_WIDTH - 10, 10)
+        screen.blit(acorn_text, text_rect)
     
-    # Update display
-    pygame.display.flip()
-    clock.tick(FPS)
+        # Update display
+        pygame.display.flip()
+        clock.tick(FPS)
+        await asyncio.sleep(0)  # Yield control for pygbag
 
-pygame.quit()
-sys.exit()
+    pygame.quit()
+    sys.exit()
+
+# Run the game
+if __name__ == "__main__":
+        import asyncio
+        asyncio.run(main())
 
