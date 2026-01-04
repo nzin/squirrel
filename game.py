@@ -311,14 +311,14 @@ class Skunk:
         self.active = True
         self.defeated = False  # Track if skunk is defeated
         self.image_change_time = time.time()
-        self.image_change_interval = 3.0  # Change image every 3 seconds
+        self.image_change_interval = 2.0  # Change image every 2 seconds
         self.current_image_index = 0
         self.images = []
         self.width = 80
         self.height = 80
         self.animation_start_time = None
         self.animation_jump_height = 20
-        self.animation_velocity_x = -2.7  # Horizontal velocity when falling
+        self.animation_velocity_x = -2.5  # Horizontal velocity when falling
         self.animation_velocity_y = 0  # Vertical velocity for falling
         self.initial_y = y  # Store initial floor position
         self.defeated_floor_y = None  # Floor position when defeated
@@ -345,29 +345,26 @@ class Skunk:
                 self.animation_start_time = time.time()
                 # Store the floor position when defeated
                 self.defeated_floor_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
-                self.animation_velocity_y = 0  # Start with no vertical velocity
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
             
-            elapsed = time.time() - self.animation_start_time
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
             
-            if elapsed < 0.3:
-                # Jump up phase
-                jump_progress = elapsed / 0.3
-                self.y = self.defeated_floor_y - (self.animation_jump_height * (1 - jump_progress))
-                # Move horizontally during jump
-                self.x += self.animation_velocity_x
-            else:
-                # Falling phase - apply gravity and continue falling
-                # Apply gravity to vertical velocity
-                self.animation_velocity_y += GRAVITY
-                # Update position with velocity
-                self.y += self.animation_velocity_y
-                self.x += self.animation_velocity_x
-                # Don't stop at floor - continue falling off screen
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Don't stop at floor - continue falling off screen
         else:
             # Normal scrolling
             self.x -= scroll_speed
             
-            # Change image randomly every 3 seconds
+            # Change image randomly every 2 seconds
             if time.time() - self.image_change_time >= self.image_change_interval:
                 self.current_image_index = random.randint(0, len(self.images) - 1)
                 self.image_change_time = time.time()
