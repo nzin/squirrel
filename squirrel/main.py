@@ -140,22 +140,35 @@ class Squirrel:
                     else:
                         self.game_over = True
         
-        # Check cloud collisions before moving (similar to boxes, but only landing on top)
+        # Check cloud collisions before moving
+        # When jumping up (velocity_y < 0), completely ignore cloud collisions - let the squirrel pass through
+        # When falling down (velocity_y > 0), check if squirrel should land on cloud
         if clouds:
-            squirrel_rect = pygame.Rect(self.x, new_y, self.width, self.height)
-            for cloud in clouds:
-                if cloud.active and cloud.get_rect().colliderect(squirrel_rect):
-                    cloud_rect = cloud.get_rect()
-                    # Determine collision direction based on previous position
-                    prev_top = self.prev_y
-                    
-                    # Check if landing on top of cloud
-                    if prev_top <= cloud_rect.y and self.velocity_y > 0:
-                        # Squirrel is above or falling onto the cloud - land on top
-                        # Position squirrel so its bottom is at the cloud's top
-                        new_y = cloud_rect.y - self.height
-                        self.velocity_y = 0
-                        self.is_jumping = False
+            # Only check for collisions when falling down or at peak (velocity_y >= 0)
+            # This ensures the squirrel can pass through clouds when jumping up
+            if self.velocity_y >= 0:  # Falling down or at peak
+                squirrel_rect = pygame.Rect(self.x, new_y, self.width, self.height)
+                for cloud in clouds:
+                    if cloud.active and cloud.get_rect().colliderect(squirrel_rect):
+                        cloud_rect = cloud.get_rect()
+                        # Determine collision direction based on previous position
+                        prev_top = self.prev_y
+                        prev_bottom = self.prev_y + self.height
+                        cloud_top = cloud_rect.y
+                        cloud_bottom = cloud_rect.y + cloud_rect.height
+                        
+                        # Only land on cloud if:
+                        # 1. Squirrel is falling (velocity_y > 0) or at peak
+                        # 2. Squirrel's previous top was at or above the cloud's top
+                        # This ensures the squirrel was above the cloud before landing
+                        if prev_top <= cloud_top:
+                            # Squirrel is above or falling onto the cloud - land on top
+                            # Position squirrel so its bottom is at the cloud's top
+                            new_y = cloud_rect.y - self.height
+                            self.velocity_y = 0
+                            self.is_jumping = False
+                            break  # Only handle one cloud collision per frame
+            # When velocity_y < 0 (jumping up), don't check collisions at all - let it pass through
         
         self.y = new_y
         
@@ -180,9 +193,10 @@ class Squirrel:
                         self.is_jumping = False
                         break
         
-        # Check if standing on a cloud
+        # Check if standing on a cloud (only when not jumping upward)
+        # When jumping up, don't check - allow the squirrel to pass through clouds
         standing_on_cloud = False
-        if clouds:
+        if clouds and self.velocity_y >= 0:  # Only check when falling or at rest
             squirrel_bottom = self.y + self.height
             squirrel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
             for cloud in clouds:
