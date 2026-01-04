@@ -385,6 +385,95 @@ class Skunk:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class Bird:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        self.defeated = False  # Track if bird is defeated
+        self.image_change_time = time.time()
+        self.image_change_interval = 0.5  # Change image every 0.5 seconds
+        self.current_image_index = 0
+        self.images = []
+        self.width = 60
+        self.height = 60
+        self.forward_speed = -0.5  # Move forward slowly
+        self.animation_start_time = None
+        self.animation_jump_height = 20
+        self.animation_velocity_x = -2.5  # Horizontal velocity when falling
+        self.animation_velocity_y = 0  # Vertical velocity for falling
+        self.defeated_floor_y = None  # Floor position when defeated
+        
+        # Load bird images
+        try:
+            img1 = pygame.image.load("assets/bird_1.png")
+            img1 = pygame.transform.scale(img1, (self.width, self.height))
+            self.images.append(img1)
+        except pygame.error:
+            self.images.append(None)
+        
+        try:
+            img2 = pygame.image.load("assets/bird_2.png")
+            img2 = pygame.transform.scale(img2, (self.width, self.height))
+            self.images.append(img2)
+        except pygame.error:
+            self.images.append(None)
+        
+        if not self.images:
+            self.images = [None, None]
+    
+    def update(self, scroll_speed):
+        if self.defeated:
+            # Animate defeated bird: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the position when defeated
+                self.defeated_floor_y = self.y
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
+            
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
+            
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Deactivate if off screen
+            if self.x + self.width < 0 or self.y > SCREEN_HEIGHT:
+                self.active = False
+        else:
+            self.prev_x = self.x
+            # Birds scroll with the background but also move forward slowly
+            self.x -= scroll_speed
+            self.x += self.forward_speed  # Move forward (to the right) slowly
+            
+            # Change image every 0.5 seconds (alternate between the two)
+            if time.time() - self.image_change_time >= self.image_change_interval:
+                self.current_image_index = (self.current_image_index + 1) % len(self.images)
+                self.image_change_time = time.time()
+            
+            # Deactivate if off screen to the left
+            if self.x + self.width < 0:
+                self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                color = (100, 100, 100) if self.defeated else (100, 150, 200)
+                pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
 # Calculate maximum jump height
 # Using physics: v² = u² + 2as, where v=0 at max height
 # 0 = JUMP_STRENGTH² + 2*GRAVITY*height
@@ -397,10 +486,13 @@ acorns_list = []
 boxes = []
 trees = []  # Trees on the floor
 skunks = []  # Skunks on the floor
+birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
+next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
+BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
 
 # Font for displaying acorn count
@@ -511,6 +603,25 @@ while running:
         skunks.append(skunk)
         next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
     
+    # Spawn new birds randomly in the air (only if game not over)
+    if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
+        # Calculate bird placement (similar to boxes - in the air, reachable by jumping)
+        squirrel_ground_y = SCREEN_HEIGHT - SOIL_HEIGHT - squirrel.height
+        bird_height = 40  # Bird height
+        # Bird bottom must be above squirrel and within jump reach
+        min_bird_y = squirrel_ground_y - MAX_JUMP_HEIGHT - bird_height
+        max_bird_y = squirrel_ground_y - bird_height - 1
+        
+        if min_bird_y < max_bird_y:
+            bird_y = random.randint(int(min_bird_y), int(max_bird_y))
+        else:
+            bird_y = int(squirrel_ground_y - MAX_JUMP_HEIGHT / 2 - bird_height)
+        
+        bird_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+        bird = Bird(bird_x, bird_y)
+        birds.append(bird)
+        next_bird_spawn_offset = scroll_offset + random.randint(BIRD_SPAWN_DISTANCE, BIRD_SPAWN_DISTANCE + 600)
+    
     # Update game objects
     squirrel.update(boxes)
     
@@ -518,12 +629,21 @@ while running:
     if not squirrel.game_over:
         for acorn in acorns_list[:]:
             acorn.update()
-            # Check if acorn collides with a skunk
+            # Check if acorn collides with a skunk or bird
             acorn_rect = pygame.Rect(acorn.x, acorn.y, acorn.width, acorn.height)
             for skunk in skunks:
                 if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(acorn_rect):
                     # Acorn hit skunk - defeat the skunk
                     skunk.defeated = True
+                    acorn.active = False
+                    break
+            if not acorn.active:
+                acorns_list.remove(acorn)
+                continue
+            for bird in birds:
+                if not bird.defeated and bird.active and bird.get_rect().colliderect(acorn_rect):
+                    # Acorn hit bird - defeat the bird
+                    bird.defeated = True
                     acorn.active = False
                     break
             if not acorn.active:
@@ -541,6 +661,13 @@ while running:
         skunk.update(SCROLL_SPEED if not squirrel.game_over else 0)
         if not skunk.active:
             skunks.remove(skunk)
+    
+    # Update birds (only if game not over)
+    for bird in birds[:]:
+        if not squirrel.game_over:
+            bird.update(SCROLL_SPEED)
+        if not bird.active:
+            birds.remove(bird)
     
     # Check tree collisions with squirrel (only left side collision triggers game over)
     if not squirrel.game_over:
@@ -568,6 +695,19 @@ while running:
                 # If squirrel's right side hits the skunk's left side, game over
                 if prev_skunk_left >= squirrel.x + squirrel.width and skunk_left <= squirrel.x + squirrel.width:
                     # Game over - hit left side of skunk
+                    squirrel.game_over = True
+                    break
+        
+        # Check bird collisions with squirrel (only left side collision triggers game over)
+        for bird in birds:
+            if not bird.defeated and bird.active and bird.get_rect().colliderect(squirrel_rect):
+                # Check if squirrel hit the left side of the bird
+                bird_rect = bird.get_rect()
+                bird_left = bird_rect.x
+                prev_bird_left = bird.prev_x
+                # If squirrel's right side hits the bird's left side, game over
+                if prev_bird_left >= squirrel.x + squirrel.width and bird_left <= squirrel.x + squirrel.width:
+                    # Game over - hit left side of bird
                     squirrel.game_over = True
                     break
     
@@ -641,6 +781,10 @@ while running:
     # Draw skunks (on the floor)
     for skunk in skunks:
         skunk.draw(screen)
+    
+    # Draw birds (in the air)
+    for bird in birds:
+        bird.draw(screen)
     
     # Draw boxes
     for box in boxes:
