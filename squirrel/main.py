@@ -373,6 +373,94 @@ class Box:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class RainbowAcorn:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 30
+        self.height = 30
+        self.active = True
+        self.collected = False  # Track if collected
+        self.animation_start_time = None
+        self.animation_duration = 2.0  # 2 seconds
+        self.initial_y = y
+        self.initial_x = x
+        self.animation_start_x = x  # Store x position when animation starts
+        self.animation_start_y = y  # Store y position when animation starts
+        
+        # Load rainbow acorn image
+        try:
+            self.image = pygame.image.load("assets/rainbow_acorn.png")
+            self.image = pygame.transform.scale(self.image, (self.width, self.height))
+        except pygame.error:
+            self.image = None
+    
+    def start_collection_animation(self):
+        """Start the collection animation (move to top and fade)"""
+        if not self.collected:
+            self.collected = True
+            self.animation_start_time = time.time()
+            # Store current position when collection starts (for animation without scrolling)
+            self.animation_start_x = self.x
+            self.animation_start_y = self.y
+    
+    def update(self, scroll_speed):
+        # Scroll with background if not collected
+        if not self.collected:
+            self.x -= scroll_speed
+            # Deactivate if off screen to the left
+            if self.x + self.width < 0:
+                self.active = False
+        else:
+            # Animation: move to top and fade (with scrolling)
+            if self.animation_start_time is not None:
+                elapsed = time.time() - self.animation_start_time
+                if elapsed < self.animation_duration:
+                    # Move to top (y = 0) - animate y position
+                    progress = elapsed / self.animation_duration
+                    # Smooth movement to top
+                    target_y = 0
+                    self.y = self.animation_start_y - (self.animation_start_y - target_y) * progress
+                    # Continue scrolling x position during animation
+                    self.x -= scroll_speed
+                else:
+                    # Animation complete, deactivate
+                    self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.collected and self.animation_start_time is not None:
+                # During animation: fade out
+                elapsed = time.time() - self.animation_start_time
+                if elapsed < self.animation_duration:
+                    # Calculate alpha (fade from 255 to 0)
+                    alpha = int(255 * (1 - elapsed / self.animation_duration))
+                    if self.image:
+                        # Create a copy of the image with alpha
+                        faded_image = self.image.copy()
+                        faded_image.set_alpha(alpha)
+                        surface.blit(faded_image, (self.x, self.y))
+                    else:
+                        # Fallback: draw with fading color
+                        color = (255, 192, 203)  # Pink color
+                        color_with_alpha = (*color, alpha)
+                        # Note: pygame.draw doesn't support alpha directly, so we'd need a surface
+                        # For simplicity, just draw normally
+                        pygame.draw.ellipse(surface, color, (self.x, self.y, self.width, self.height))
+                else:
+                    # Don't draw if animation is complete
+                    pass
+            else:
+                # Normal drawing
+                if self.image:
+                    surface.blit(self.image, (self.x, self.y))
+                else:
+                    # Fallback: draw simple ellipse
+                    pygame.draw.ellipse(surface, (255, 192, 203), (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
 class Cloud:
     def __init__(self, x, y):
         self.x = x
@@ -530,6 +618,90 @@ class Skunk:
             else:
                 # Fallback: draw simple rectangle
                 color = (100, 100, 100) if self.defeated else (50, 50, 50)
+                pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+class Croco:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        self.defeated = False  # Track if croco is defeated
+        self.image_change_time = time.time()
+        self.image_change_interval = 0.75  # Change image every 1 seconds
+        self.current_image_index = 0
+        self.images = []
+        self.width = 80
+        self.height = 80
+        self.forward_speed = -2.0  # Move forward (to the left)
+        self.animation_start_time = None
+        self.animation_jump_height = 20
+        self.animation_velocity_x = -2.5  # Horizontal velocity when falling
+        self.animation_velocity_y = 0  # Vertical velocity for falling
+        self.initial_y = y  # Store initial floor position
+        self.defeated_floor_y = None  # Floor position when defeated
+        
+        # Load all croco images
+        for i in range(1, 4):
+            try:
+                img = pygame.image.load(f"assets/croco{i}.png")
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.images.append(img)
+            except (pygame.error, FileNotFoundError, Exception) as e:
+                # Handle any error during image loading
+                self.images.append(None)
+        
+        if not self.images:
+            self.images = [None] * 3
+    
+    def update(self, scroll_speed):
+        self.prev_x = self.x
+        
+        if self.defeated:
+            # Animate defeated croco: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the floor position when defeated
+                self.defeated_floor_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
+            
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
+            
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Don't stop at floor - continue falling off screen
+        else:
+            # Normal scrolling with forward speed
+            self.x -= scroll_speed
+            self.x += self.forward_speed  # Move forward (to the left)
+            
+            # Change image randomly every 1.5 seconds
+            if time.time() - self.image_change_time >= self.image_change_interval:
+                self.current_image_index = random.randint(0, len(self.images) - 1)
+                self.image_change_time = time.time()
+        
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                color = (100, 100, 100) if self.defeated else (0, 100, 0)
                 pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
     
     def get_rect(self):
@@ -729,18 +901,24 @@ acorns_list = []
 boxes = []
 trees = []  # Trees on the floor
 skunks = []  # Skunks on the floor
+crocos = []  # Crocos on the floor
 birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
 clouds = []  # Clouds in the sky
 pterodactyls = []  # Pterodactyls in the air
+rainbow_acorns = []  # Rainbow acorns on clouds
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
+next_croco_spawn_offset = 1000  # Next croco will spawn at this scroll offset
 next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
 next_pterodactyl_spawn_offset = 1500  # Next pterodactyl will spawn at this scroll offset
 BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
+CROCO_SPAWN_DISTANCE = 2000  # Distance between croco spawns
 PTERODACTYL_SPAWN_DISTANCE = 2000  # Distance between pterodactyl spawns
+RAINBOW_ACORN_SPAWN_DISTANCE = 2500  # Distance between rainbow acorn spawns
+next_rainbow_acorn_spawn_offset = 2000  # Next rainbow acorn will spawn at this scroll offset
 last_box_spawn_offset = None  # Track last box spawn scroll offset
 last_tree_spawn_offset = None  # Track last tree spawn scroll offset
 
@@ -769,9 +947,9 @@ except pygame.error:
 # Function to reset game state
 def reset_game():
     global scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_croco_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
-    global acorns_list, boxes, trees, skunks, birds, popup_acorns, clouds, pterodactyls
+    global acorns_list, boxes, trees, skunks, crocos, birds, popup_acorns, clouds, pterodactyls, rainbow_acorns
     
     # Reset game state
     scroll_offset = 0
@@ -780,6 +958,7 @@ def reset_game():
     next_box_spawn_offset = 200
     next_tree_spawn_offset = 500
     next_skunk_spawn_offset = 1000
+    next_croco_spawn_offset = 1000
     next_bird_spawn_offset = 800
     next_pterodactyl_spawn_offset = 1500
     last_box_spawn_offset = None
@@ -790,10 +969,12 @@ def reset_game():
     boxes = []
     trees = []
     skunks = []
+    crocos = []
     birds = []
     popup_acorns = []
     clouds = []
     pterodactyls = []
+    rainbow_acorns = []
     
     # Initialize clouds for continuous rows
     # Row 1 at y=300, Row 2 at y=400
@@ -822,7 +1003,7 @@ def reset_game():
 # Main game loop
 async def main():
     global running, scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_croco_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
     global game_over_time
     
@@ -1003,15 +1184,29 @@ async def main():
                 last_tree_spawn_offset = scroll_offset
                 next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
         
-        # Spawn new skunks randomly on the floor (only if game not over)
-        if not squirrel.game_over and scroll_offset >= next_skunk_spawn_offset:
-            # Place skunk on the floor (soil)
-            soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
-            skunk_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-            skunk_y = soil_y - 80  # Position skunk so bottom is at soil level (skunk height is 80)
-            skunk = Skunk(skunk_x, skunk_y)
-            skunks.append(skunk)
-            next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
+        # Spawn new skunks or crocos randomly on the floor (only if game not over)
+        # When score >= 10, stop spawning skunks and start spawning crocos
+        if not squirrel.game_over:
+            if score < 10:
+                # Spawn skunks when score < 10
+                if scroll_offset >= next_skunk_spawn_offset:
+                    # Place skunk on the floor (soil)
+                    soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+                    skunk_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+                    skunk_y = soil_y - 80  # Position skunk so bottom is at soil level (skunk height is 80)
+                    skunk = Skunk(skunk_x, skunk_y)
+                    skunks.append(skunk)
+                    next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
+            else:
+                # Spawn crocos when score >= 10
+                if scroll_offset >= next_croco_spawn_offset:
+                    # Place croco on the floor (soil)
+                    soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+                    croco_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+                    croco_y = soil_y - 80  # Position croco so bottom is at soil level (croco height is 80)
+                    croco = Croco(croco_x, croco_y)
+                    crocos.append(croco)
+                    next_croco_spawn_offset = scroll_offset + random.randint(CROCO_SPAWN_DISTANCE, CROCO_SPAWN_DISTANCE + 1000)
         
         # Spawn new birds randomly in the air (only if game not over)
         if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
@@ -1054,22 +1249,49 @@ async def main():
                         squirrel_on_cloud = True
                         break
         
+        # Spawn rainbow acorns randomly on clouds (only if game not over)
+        # Probability: 1/30 chance each frame
+        # At most 1 rainbow acorn at once
+        # Spawn off-screen to the right so it scrolls into view
+        # Only spawn on clouds in the second row (y = 250) that are off-screen to the right
+        if (not squirrel.game_over and 
+            len([ra for ra in rainbow_acorns if ra.active and not ra.collected]) == 0 and
+            random.randint(1, 30) == 1):
+            # Find active clouds in the second row (y = 250) that are off-screen to the right
+            # A cloud is off-screen to the right if its x position is >= SCREEN_WIDTH
+            active_clouds_row2_offscreen = [
+                cloud for cloud in clouds 
+                if cloud.active and cloud.y == 250 and cloud.x >= SCREEN_WIDTH
+            ]
+            if active_clouds_row2_offscreen:
+                # Pick a random cloud from the second row that's off-screen
+                cloud = random.choice(active_clouds_row2_offscreen)
+                cloud_rect = cloud.get_rect()
+                # Spawn rainbow acorn centered on the cloud
+                # Since the cloud is off-screen, the rainbow acorn will also be off-screen
+                # Both will scroll into view together maintaining their relative positions
+                # Center horizontally: cloud center - rainbow acorn half width
+                rainbow_acorn_x = cloud_rect.x + cloud_rect.width // 2 - 15  # Centered on cloud (15 is half of rainbow_acorn width)
+                # Position above the cloud
+                rainbow_acorn_y = cloud_rect.y - 30  # Above the cloud
+                rainbow_acorn = RainbowAcorn(rainbow_acorn_x, rainbow_acorn_y)
+                rainbow_acorns.append(rainbow_acorn)
+        
         # Spawn new pterodactyls randomly when squirrel is on a cloud (only if game not over)
         # Only spawn if we haven't already spawned one recently (check spawn offset)
         if (not squirrel.game_over and squirrel_on_cloud and 
             scroll_offset >= next_pterodactyl_spawn_offset):
+            # Update spawn offset FIRST to prevent multiple spawns even if creation fails
+            next_pterodactyl_spawn_offset = scroll_offset + random.randint(PTERODACTYL_SPAWN_DISTANCE, PTERODACTYL_SPAWN_DISTANCE + 600)
             try:
                 # Spawn pterodactyl at y = 100
                 pterodactyl_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
                 pterodactyl_y = 100
                 pterodactyl = Pterodactyl(pterodactyl_x, pterodactyl_y)
                 pterodactyls.append(pterodactyl)
-                # Update spawn offset to prevent spawning multiple times
-                next_pterodactyl_spawn_offset = scroll_offset + random.randint(PTERODACTYL_SPAWN_DISTANCE, PTERODACTYL_SPAWN_DISTANCE + 600)
             except Exception as e:
-                # If pterodactyl creation fails, skip it and update offset anyway to prevent infinite retries
+                # If pterodactyl creation fails, log it but offset is already updated
                 print(f"Error creating pterodactyl: {e}")
-                next_pterodactyl_spawn_offset = scroll_offset + random.randint(PTERODACTYL_SPAWN_DISTANCE, PTERODACTYL_SPAWN_DISTANCE + 600)
         
         # Update acorns (only if game not over)
         if not squirrel.game_over:
@@ -1081,6 +1303,16 @@ async def main():
                     if not skunk.defeated and skunk.active and skunk.get_rect().colliderect(acorn_rect):
                         # Acorn hit skunk - defeat the skunk
                         skunk.defeated = True
+                        acorn.active = False
+                        score += 1  # Increase score
+                        break
+                if not acorn.active:
+                    acorns_list.remove(acorn)
+                    continue
+                for croco in crocos:
+                    if not croco.defeated and croco.active and croco.get_rect().colliderect(acorn_rect):
+                        # Acorn hit croco - defeat the croco
+                        croco.defeated = True
                         acorn.active = False
                         score += 1  # Increase score
                         break
@@ -1124,6 +1356,12 @@ async def main():
             if not skunk.active:
                 skunks.remove(skunk)
         
+        # Update crocos
+        for croco in crocos[:]:
+            croco.update(SCROLL_SPEED if not squirrel.game_over else 0)
+            if not croco.active:
+                crocos.remove(croco)
+        
         # Update birds (only if game not over)
         for bird in birds[:]:
             if not squirrel.game_over:
@@ -1144,6 +1382,13 @@ async def main():
                 cloud.update(SCROLL_SPEED)
             if not cloud.active:
                 clouds.remove(cloud)
+        
+        # Update rainbow acorns
+        for rainbow_acorn in rainbow_acorns[:]:
+            if not squirrel.game_over:
+                rainbow_acorn.update(SCROLL_SPEED)
+            if not rainbow_acorn.active:
+                rainbow_acorns.remove(rainbow_acorn)
         
         # Spawn new clouds continuously to maintain the rows
         # Check if we need to add more clouds at the right edge
@@ -1195,6 +1440,21 @@ async def main():
                             game_over_time = time.time()
                         break
             
+            # Check croco collisions with squirrel (only left side collision triggers game over)
+            for croco in crocos:
+                if not croco.defeated and croco.active and croco.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the croco
+                    croco_rect = croco.get_rect()
+                    croco_left = croco_rect.x
+                    prev_croco_left = croco.prev_x
+                    # If squirrel's right side hits the croco's left side, game over
+                    if prev_croco_left >= squirrel.x + squirrel.width and croco_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of croco
+                        squirrel.game_over = True
+                        if game_over_time is None:
+                            game_over_time = time.time()
+                        break
+            
             # Check bird collisions with squirrel (only left side collision triggers game over)
             for bird in birds:
                 if not bird.defeated and bird.active and bird.get_rect().colliderect(squirrel_rect):
@@ -1239,6 +1499,15 @@ async def main():
                         if game_over_time is None:
                             game_over_time = time.time()
                         break
+            
+            # Check rainbow acorn collisions with squirrel
+            for rainbow_acorn in rainbow_acorns:
+                if not rainbow_acorn.collected and rainbow_acorn.active and rainbow_acorn.get_rect().colliderect(squirrel_rect):
+                    # Squirrel collected the rainbow acorn
+                    rainbow_acorn.start_collection_animation()
+                    acorns += 5  # Add 5 acorns
+                    score += 2  # Add 2 points for each rainbow acorn collected
+                    break
         
         # Update boxes and check collection collisions (only if game not over)
         squirrel_rect = pygame.Rect(squirrel.x, squirrel.y, squirrel.width, squirrel.height)
@@ -1311,6 +1580,10 @@ async def main():
         for skunk in skunks:
             skunk.draw(screen)
         
+        # Draw crocos (on the floor)
+        for croco in crocos:
+            croco.draw(screen)
+        
         # Draw birds (in the air)
         for bird in birds:
             bird.draw(screen)
@@ -1322,6 +1595,10 @@ async def main():
         # Draw clouds
         for cloud in clouds:
             cloud.draw(screen)
+        
+        # Draw rainbow acorns
+        for rainbow_acorn in rainbow_acorns:
+            rainbow_acorn.draw(screen)
         
         # Draw boxes
         for box in boxes:
