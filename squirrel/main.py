@@ -630,6 +630,7 @@ class Croco:
         self.y = y
         self.active = True
         self.defeated = False  # Track if croco is defeated
+        self.life_points = 2  # 2 points of life
         self.image_change_time = time.time()
         self.image_change_interval = 0.75  # Change image every 1 seconds
         self.current_image_index = 0
@@ -1311,10 +1312,13 @@ async def main():
                     continue
                 for croco in crocos:
                     if not croco.defeated and croco.active and croco.get_rect().colliderect(acorn_rect):
-                        # Acorn hit croco - defeat the croco
-                        croco.defeated = True
+                        # Acorn hit croco - reduce life points
+                        croco.life_points -= 1
                         acorn.active = False
-                        score += 1  # Increase score
+                        if croco.life_points <= 0:
+                            # Croco is defeated
+                            croco.defeated = True
+                            score += 1  # Increase score
                         break
                 if not acorn.active:
                     acorns_list.remove(acorn)
