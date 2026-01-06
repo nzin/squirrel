@@ -1443,15 +1443,17 @@ async def main():
         
         # Update skunks
         for skunk in skunks[:]:
-            skunk.update(SCROLL_SPEED if not squirrel.game_over else 0)
-            if not skunk.active:
-                skunks.remove(skunk)
+            if not squirrel.game_over:
+                skunk.update(SCROLL_SPEED)
+                if not skunk.active:
+                    skunks.remove(skunk)
         
         # Update beavers
         for beaver in beavers[:]:
-            beaver.update(SCROLL_SPEED if not squirrel.game_over else 0)
-            if not beaver.active:
-                beavers.remove(beaver)
+            if not squirrel.game_over:
+                beaver.update(SCROLL_SPEED)
+                if not beaver.active:
+                    beavers.remove(beaver)
         
         # Update birds (only if game not over)
         for bird in birds[:]:
