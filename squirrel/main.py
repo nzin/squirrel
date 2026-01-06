@@ -507,21 +507,23 @@ class Tree:
         self.prev_x = x
         self.y = y
         self.active = True
-        # Load tree image
-        try:
-            self.image = pygame.image.load("assets/tree2.png")
-            # Scale tree to reasonable size (adjust as needed)
-            tree_height = 75  # Height of tree on screen
-            tree_width = int(self.image.get_width() * (tree_height / self.image.get_height()))
-            self.image = pygame.transform.scale(self.image, (tree_width, tree_height))
-            self.width = tree_width
-            self.height = tree_height
-        except pygame.error:
-            # Fallback if image fails to load
-            self.image = None
-            self.width = 30
-            self.height = 75
-    
+        self.images = []
+        self.width = 60
+        self.height = 75
+        # Load all tree images
+        for i in range(1, 3):
+            try:
+                img = pygame.image.load(f"assets/tree{i}.png")
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.images.append(img)
+            except (pygame.error, FileNotFoundError, Exception) as e:
+                # Handle any error during image loading
+                self.images.append(None)
+        
+        if not self.images:
+            self.images = [None] * 3
+        self.current_image_index = random.randint(0, len(self.images) - 1)
+        
     def update(self, scroll_speed):
         # Trees scroll with the background
         self.prev_x = self.x
@@ -532,8 +534,8 @@ class Tree:
     
     def draw(self, surface):
         if self.active:
-            if self.image:
-                surface.blit(self.image, (self.x, self.y))
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
             else:
                 # Fallback: draw simple rectangle
                 pygame.draw.rect(surface, (34, 139, 34), (self.x, self.y, self.width, self.height))
@@ -690,6 +692,91 @@ class Croco:
             # Change image randomly every 1.5 seconds
             if time.time() - self.image_change_time >= self.image_change_interval:
                 self.current_image_index = random.randint(0, len(self.images) - 1)
+                self.image_change_time = time.time()
+        
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.images and self.images[self.current_image_index]:
+                surface.blit(self.images[self.current_image_index], (self.x, self.y))
+            else:
+                # Fallback: draw simple rectangle
+                color = (100, 100, 100) if self.defeated else (0, 100, 0)
+                pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+class Beaver:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        self.defeated = False  # Track if beaver is defeated
+        self.life_points = 2  # 2 points of life
+        self.image_change_time = time.time()
+        self.image_change_interval = 0.25  # Change image every 0.5 seconds
+        self.current_image_index = 0
+        self.images = []
+        self.width = 90
+        self.height = 40
+        self.forward_speed = -2.0  # Move forward (to the left)
+        self.animation_start_time = None
+        self.animation_jump_height = 20
+        self.animation_velocity_x = -2.5  # Horizontal velocity when falling
+        self.animation_velocity_y = 0  # Vertical velocity for falling
+        self.initial_y = y  # Store initial floor position
+        self.defeated_floor_y = None  # Floor position when defeated
+        
+        # Load all beaver images
+        for i in range(1, 4):
+            try:
+                img = pygame.image.load(f"assets/beaver{i}.png")
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.images.append(img)
+            except (pygame.error, FileNotFoundError, Exception) as e:
+                # Handle any error during image loading
+                self.images.append(None)
+        
+        if not self.images:
+            self.images = [None] * 3
+    
+    def update(self, scroll_speed):
+        self.prev_x = self.x
+        
+        if self.defeated:
+            # Animate defeated beaver: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the floor position when defeated
+                self.defeated_floor_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
+            
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
+            
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Don't stop at floor - continue falling off screen
+        else:
+            # Normal scrolling with forward speed
+            self.x -= scroll_speed
+            self.x += self.forward_speed  # Move forward (to the left)
+            
+            # Change image randomly every 0.25 seconds
+            if time.time() - self.image_change_time >= self.image_change_interval:
+                self.current_image_index = (self.current_image_index +1) % len(self.images)
                 self.image_change_time = time.time()
         
         # Deactivate if off screen to the left
@@ -902,7 +989,7 @@ acorns_list = []
 boxes = []
 trees = []  # Trees on the floor
 skunks = []  # Skunks on the floor
-crocos = []  # Crocos on the floor
+beavers = []  # Beavers on the floor
 birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
 clouds = []  # Clouds in the sky
@@ -911,12 +998,12 @@ rainbow_acorns = []  # Rainbow acorns on clouds
 next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
-next_croco_spawn_offset = 1000  # Next croco will spawn at this scroll offset
+next_beaver_spawn_offset = 1000  # Next beaver will spawn at this scroll offset
 next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
 next_pterodactyl_spawn_offset = 1500  # Next pterodactyl will spawn at this scroll offset
 BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
-CROCO_SPAWN_DISTANCE = 2000  # Distance between croco spawns
+BEAVER_SPAWN_DISTANCE = 1700  # Distance between beaver spawns
 PTERODACTYL_SPAWN_DISTANCE = 2000  # Distance between pterodactyl spawns
 RAINBOW_ACORN_SPAWN_DISTANCE = 2500  # Distance between rainbow acorn spawns
 next_rainbow_acorn_spawn_offset = 2000  # Next rainbow acorn will spawn at this scroll offset
@@ -948,9 +1035,9 @@ except pygame.error:
 # Function to reset game state
 def reset_game():
     global scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_croco_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
-    global acorns_list, boxes, trees, skunks, crocos, birds, popup_acorns, clouds, pterodactyls, rainbow_acorns
+    global acorns_list, boxes, trees, skunks, beavers, birds, popup_acorns, clouds, pterodactyls, rainbow_acorns
     
     # Reset game state
     scroll_offset = 0
@@ -959,7 +1046,7 @@ def reset_game():
     next_box_spawn_offset = 200
     next_tree_spawn_offset = 500
     next_skunk_spawn_offset = 1000
-    next_croco_spawn_offset = 1000
+    next_beaver_spawn_offset = 1000
     next_bird_spawn_offset = 800
     next_pterodactyl_spawn_offset = 1500
     last_box_spawn_offset = None
@@ -970,7 +1057,7 @@ def reset_game():
     boxes = []
     trees = []
     skunks = []
-    crocos = []
+    beavers = []
     birds = []
     popup_acorns = []
     clouds = []
@@ -1004,7 +1091,7 @@ def reset_game():
 # Main game loop
 async def main():
     global running, scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_croco_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
     global game_over_time
     
@@ -1185,8 +1272,8 @@ async def main():
                 last_tree_spawn_offset = scroll_offset
                 next_tree_spawn_offset = scroll_offset + random.randint(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
         
-        # Spawn new skunks or crocos randomly on the floor (only if game not over)
-        # When score >= 10, stop spawning skunks and start spawning crocos
+        # Spawn new skunks or beavers randomly on the floor (only if game not over)
+        # When score >= 10, stop spawning skunks and start spawning beavers
         if not squirrel.game_over:
             if score < 10:
                 # Spawn skunks when score < 10
@@ -1199,15 +1286,15 @@ async def main():
                     skunks.append(skunk)
                     next_skunk_spawn_offset = scroll_offset + random.randint(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
             else:
-                # Spawn crocos when score >= 10
-                if scroll_offset >= next_croco_spawn_offset:
-                    # Place croco on the floor (soil)
+                # Spawn beavers when score >= 10
+                if scroll_offset >= next_beaver_spawn_offset:
+                    # Place beaver on the floor (soil)
                     soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
-                    croco_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
-                    croco_y = soil_y - 80  # Position croco so bottom is at soil level (croco height is 80)
-                    croco = Croco(croco_x, croco_y)
-                    crocos.append(croco)
-                    next_croco_spawn_offset = scroll_offset + random.randint(CROCO_SPAWN_DISTANCE, CROCO_SPAWN_DISTANCE + 1000)
+                    beaver_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+                    beaver_y = soil_y - 40  # Position beaver so bottom is at soil level (beaver height is 80)
+                    beaver = Beaver(beaver_x, beaver_y)
+                    beavers.append(beaver)
+                    next_beaver_spawn_offset = scroll_offset + random.randint(BEAVER_SPAWN_DISTANCE, BEAVER_SPAWN_DISTANCE + 1000)
         
         # Spawn new birds randomly in the air (only if game not over)
         if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
@@ -1310,14 +1397,14 @@ async def main():
                 if not acorn.active:
                     acorns_list.remove(acorn)
                     continue
-                for croco in crocos:
-                    if not croco.defeated and croco.active and croco.get_rect().colliderect(acorn_rect):
-                        # Acorn hit croco - reduce life points
-                        croco.life_points -= 1
+                for beaver in beavers:
+                    if not beaver.defeated and beaver.active and beaver.get_rect().colliderect(acorn_rect):
+                        # Acorn hit beaver - reduce life points
+                        beaver.life_points -= 1
                         acorn.active = False
-                        if croco.life_points <= 0:
-                            # Croco is defeated
-                            croco.defeated = True
+                        if beaver.life_points <= 0:
+                            # Beaver is defeated
+                            beaver.defeated = True
                             score += 1  # Increase score
                         break
                 if not acorn.active:
@@ -1360,11 +1447,11 @@ async def main():
             if not skunk.active:
                 skunks.remove(skunk)
         
-        # Update crocos
-        for croco in crocos[:]:
-            croco.update(SCROLL_SPEED if not squirrel.game_over else 0)
-            if not croco.active:
-                crocos.remove(croco)
+        # Update beavers
+        for beaver in beavers[:]:
+            beaver.update(SCROLL_SPEED if not squirrel.game_over else 0)
+            if not beaver.active:
+                beavers.remove(beaver)
         
         # Update birds (only if game not over)
         for bird in birds[:]:
@@ -1444,16 +1531,16 @@ async def main():
                             game_over_time = time.time()
                         break
             
-            # Check croco collisions with squirrel (only left side collision triggers game over)
-            for croco in crocos:
-                if not croco.defeated and croco.active and croco.get_rect().colliderect(squirrel_rect):
-                    # Check if squirrel hit the left side of the croco
-                    croco_rect = croco.get_rect()
-                    croco_left = croco_rect.x
-                    prev_croco_left = croco.prev_x
-                    # If squirrel's right side hits the croco's left side, game over
-                    if prev_croco_left >= squirrel.x + squirrel.width and croco_left <= squirrel.x + squirrel.width:
-                        # Game over - hit left side of croco
+            # Check beaver collisions with squirrel (only left side collision triggers game over)
+            for beaver in beavers:
+                if not beaver.defeated and beaver.active and beaver.get_rect().colliderect(squirrel_rect):
+                    # Check if squirrel hit the left side of the beaver
+                    beaver_rect = beaver.get_rect()
+                    beaver_left = beaver_rect.x
+                    prev_beaver_left = beaver.prev_x
+                    # If squirrel's right side hits the beaver's left side, game over
+                    if prev_beaver_left >= squirrel.x + squirrel.width and beaver_left <= squirrel.x + squirrel.width:
+                        # Game over - hit left side of beaver
                         squirrel.game_over = True
                         if game_over_time is None:
                             game_over_time = time.time()
@@ -1584,9 +1671,9 @@ async def main():
         for skunk in skunks:
             skunk.draw(screen)
         
-        # Draw crocos (on the floor)
-        for croco in crocos:
-            croco.draw(screen)
+        # Draw beavers (on the floor)
+        for beaver in beavers:
+            beaver.draw(screen)
         
         # Draw birds (in the air)
         for bird in birds:
