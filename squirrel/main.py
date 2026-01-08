@@ -795,6 +795,120 @@ class Beaver:
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
+class Mole:
+    def __init__(self, x, y):
+        self.x = x
+        self.prev_x = x
+        self.y = y
+        self.active = True
+        self.defeated = False  # Track if mole is defeated
+        self.underground = True  # Start underground
+        self.state_change_time = time.time()
+        self.state_change_interval = random.uniform(3.0, 7.0)  # Random interval between 3-7 seconds
+        self.images = []
+        self.width = 60
+        self.height = 60
+        self.initial_y = y  # Store initial floor position
+        self.animation_start_time = None
+        self.animation_jump_height = 20
+        self.animation_velocity_x = -2.5  # Horizontal velocity when falling
+        self.animation_velocity_y = 0  # Vertical velocity for falling
+        self.defeated_floor_y = None  # Floor position when defeated
+        
+        # Load mole images
+        # mole1.png = underground, mole2.png = onground
+        try:
+            img1 = pygame.image.load("assets/mole1.png")
+            img1 = pygame.transform.scale(img1, (self.width, self.height))
+            self.images.append(img1)  # Index 0 = underground
+        except (pygame.error, FileNotFoundError, Exception) as e:
+            self.images.append(None)
+        
+        try:
+            img2 = pygame.image.load("assets/mole2.png")
+            img2 = pygame.transform.scale(img2, (self.width, self.height))
+            self.images.append(img2)  # Index 1 = onground
+        except (pygame.error, FileNotFoundError, Exception) as e:
+            self.images.append(None)
+        
+        if not self.images:
+            self.images = [None, None]
+    
+    def update(self, scroll_speed):
+        self.prev_x = self.x
+        
+        if self.defeated:
+            # Animate defeated mole: jump up then fall with gravity
+            if self.animation_start_time is None:
+                self.animation_start_time = time.time()
+                # Store the floor position when defeated
+                self.defeated_floor_y = SCREEN_HEIGHT - SOIL_HEIGHT - self.height
+                # Calculate initial jump velocity to reach jump height
+                # Using physics: v² = u² + 2as, where v=0 at max height
+                # 0 = u² + 2*(-GRAVITY)*height
+                # u = sqrt(2 * GRAVITY * height)
+                jump_velocity = (2 * GRAVITY * self.animation_jump_height) ** 0.5
+                self.animation_velocity_y = -jump_velocity  # Negative because y increases downward
+                # Make sure mole is visible (onground) when defeated
+                self.underground = False
+            
+            # Apply gravity to vertical velocity (always, during jump and fall)
+            self.animation_velocity_y += GRAVITY
+            
+            # Update position with velocity
+            self.y += self.animation_velocity_y
+            self.x += self.animation_velocity_x
+            
+            # Continue scrolling even when defeated
+            if scroll_speed > 0:
+                self.x -= scroll_speed
+            
+            # Don't stop at floor - continue falling off screen
+        else:
+            # Only update if game is not over (scroll_speed > 0)
+            if scroll_speed > 0:
+                # Scroll with background
+                self.x -= scroll_speed
+                
+                # Change state (underground <-> onground) every 3-7 seconds
+                if time.time() - self.state_change_time >= self.state_change_interval:
+                    self.underground = not self.underground
+                    self.state_change_time = time.time()
+                    # Set new random interval for next state change
+                    self.state_change_interval = random.uniform(3.0, 7.0)
+        
+        # Deactivate if off screen to the left
+        if self.x + self.width < 0:
+            self.active = False
+    
+    def draw(self, surface):
+        if self.active:
+            if self.underground:
+                image_index = 0  # mole1.png (underground)
+                if self.images and self.images[image_index]:
+                    surface.blit(self.images[image_index], (self.x, self.y))
+                else:
+                    # Fallback: draw simple rectangle
+                    color = (100, 100, 100) if self.defeated else (139, 69, 19)
+                    pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+            # Draw when onground (visible) or when defeated
+            if not self.underground or self.defeated:
+                image_index = 1  # mole2.png (onground)
+                if self.images and self.images[image_index]:
+                    surface.blit(self.images[image_index], (self.x, self.y))
+                else:
+                    # Fallback: draw simple rectangle
+                    color = (100, 100, 100) if self.defeated else (139, 69, 19)
+                    pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+    
+    def get_rect(self):
+        # Only return collision rect when onground and not defeated
+        if not self.underground and not self.defeated:
+            return pygame.Rect(self.x, self.y, self.width, self.height)
+        else:
+            # Return empty rect when underground or defeated (no collision)
+            return pygame.Rect(0, 0, 0, 0)
+
 class Bird:
     def __init__(self, x, y):
         self.x = x
@@ -990,6 +1104,7 @@ boxes = []
 trees = []  # Trees on the floor
 skunks = []  # Skunks on the floor
 beavers = []  # Beavers on the floor
+moles = []  # Moles on the floor
 birds = []  # Birds in the air
 popup_acorns = []  # Acorns that pop up from boxes
 clouds = []  # Clouds in the sky
@@ -999,11 +1114,13 @@ next_box_spawn_offset = 200  # Next box will spawn at this scroll offset
 next_tree_spawn_offset = 500  # Next tree will spawn at this scroll offset
 next_skunk_spawn_offset = 1000  # Next skunk will spawn at this scroll offset
 next_beaver_spawn_offset = 1000  # Next beaver will spawn at this scroll offset
+next_mole_spawn_offset = 1200  # Next mole will spawn at this scroll offset
 next_bird_spawn_offset = 800  # Next bird will spawn at this scroll offset
 next_pterodactyl_spawn_offset = 1500  # Next pterodactyl will spawn at this scroll offset
 BIRD_SPAWN_DISTANCE = 1500  # Distance between bird spawns
 SKUNK_SPAWN_DISTANCE = 2000  # Distance between skunk spawns
 BEAVER_SPAWN_DISTANCE = 1700  # Distance between beaver spawns
+MOLE_SPAWN_DISTANCE = 1800  # Distance between mole spawns
 PTERODACTYL_SPAWN_DISTANCE = 2000  # Distance between pterodactyl spawns
 RAINBOW_ACORN_SPAWN_DISTANCE = 2500  # Distance between rainbow acorn spawns
 next_rainbow_acorn_spawn_offset = 2000  # Next rainbow acorn will spawn at this scroll offset
@@ -1035,9 +1152,9 @@ except pygame.error:
 # Function to reset game state
 def reset_game():
     global scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_mole_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
-    global acorns_list, boxes, trees, skunks, beavers, birds, popup_acorns, clouds, pterodactyls, rainbow_acorns
+    global acorns_list, boxes, trees, skunks, beavers, moles, birds, popup_acorns, clouds, pterodactyls, rainbow_acorns
     
     # Reset game state
     scroll_offset = 0
@@ -1047,6 +1164,7 @@ def reset_game():
     next_tree_spawn_offset = 500
     next_skunk_spawn_offset = 1000
     next_beaver_spawn_offset = 1000
+    next_mole_spawn_offset = 1200
     next_bird_spawn_offset = 800
     next_pterodactyl_spawn_offset = 1500
     last_box_spawn_offset = None
@@ -1058,6 +1176,7 @@ def reset_game():
     trees = []
     skunks = []
     beavers = []
+    moles = []
     birds = []
     popup_acorns = []
     clouds = []
@@ -1091,7 +1210,7 @@ def reset_game():
 # Main game loop
 async def main():
     global running, scroll_offset, acorns, score
-    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
+    global next_box_spawn_offset, next_tree_spawn_offset, next_skunk_spawn_offset, next_beaver_spawn_offset, next_mole_spawn_offset, next_bird_spawn_offset, next_pterodactyl_spawn_offset
     global last_box_spawn_offset, last_tree_spawn_offset
     global game_over_time
     
@@ -1296,6 +1415,16 @@ async def main():
                     beavers.append(beaver)
                     next_beaver_spawn_offset = scroll_offset + random.randint(BEAVER_SPAWN_DISTANCE, BEAVER_SPAWN_DISTANCE + 1000)
         
+        # Spawn new moles randomly on the floor (only if game not over and score >= 5)
+        if not squirrel.game_over and score >= 15 and scroll_offset >= next_mole_spawn_offset:
+            # Place mole on the floor (soil)
+            soil_y = SCREEN_HEIGHT - SOIL_HEIGHT
+            mole_x = SCREEN_WIDTH + 50  # Spawn just off screen to the right
+            mole_y = soil_y - 60  # Position mole so bottom is at soil level (mole height is 60)
+            mole = Mole(mole_x, mole_y)
+            moles.append(mole)
+            next_mole_spawn_offset = scroll_offset + random.randint(MOLE_SPAWN_DISTANCE, MOLE_SPAWN_DISTANCE + 1000)
+        
         # Spawn new birds randomly in the air (only if game not over)
         if not squirrel.game_over and scroll_offset >= next_bird_spawn_offset:
             # Calculate bird placement (similar to boxes - in the air, reachable by jumping)
@@ -1420,6 +1549,17 @@ async def main():
                 if not acorn.active:
                     acorns_list.remove(acorn)
                     continue
+                # Check if acorn collides with a mole (only when onground)
+                for mole in moles:
+                    if not mole.defeated and mole.active and not mole.underground and mole.get_rect().colliderect(acorn_rect):
+                        # Acorn hit mole - defeat the mole
+                        mole.defeated = True
+                        acorn.active = False
+                        score += 1  # Increase score
+                        break
+                if not acorn.active:
+                    acorns_list.remove(acorn)
+                    continue
                 # Check if acorn collides with a pterodactyl
                 for pterodactyl in pterodactyls:
                     if not pterodactyl.defeated and pterodactyl.active and pterodactyl.get_rect().colliderect(acorn_rect):
@@ -1454,6 +1594,13 @@ async def main():
                 beaver.update(SCROLL_SPEED)
                 if not beaver.active:
                     beavers.remove(beaver)
+        
+        # Update moles
+        for mole in moles[:]:
+            if not squirrel.game_over:
+                mole.update(SCROLL_SPEED)
+            if not mole.active:
+                moles.remove(mole)
         
         # Update birds (only if game not over)
         for bird in birds[:]:
@@ -1547,6 +1694,22 @@ async def main():
                         if game_over_time is None:
                             game_over_time = time.time()
                         break
+            
+            # Check mole collisions with squirrel (only when onground, left side collision triggers game over)
+            for mole in moles:
+                if mole.active and not mole.defeated and not mole.underground:  # Only check collision when onground and not defeated
+                    mole_rect = mole.get_rect()
+                    if mole_rect.colliderect(squirrel_rect):
+                        # Check if squirrel hit the left side of the mole
+                        mole_left = mole_rect.x
+                        prev_mole_left = mole.prev_x
+                        # If squirrel's right side hits the mole's left side, game over
+                        if prev_mole_left >= squirrel.x + squirrel.width and mole_left <= squirrel.x + squirrel.width:
+                            # Game over - hit left side of mole
+                            squirrel.game_over = True
+                            if game_over_time is None:
+                                game_over_time = time.time()
+                            break
             
             # Check bird collisions with squirrel (only left side collision triggers game over)
             for bird in birds:
@@ -1676,6 +1839,10 @@ async def main():
         # Draw beavers (on the floor)
         for beaver in beavers:
             beaver.draw(screen)
+        
+        # Draw moles (on the floor)
+        for mole in moles:
+            mole.draw(screen)
         
         # Draw birds (in the air)
         for bird in birds:
