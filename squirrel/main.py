@@ -1327,7 +1327,7 @@ async def main():
             
             # Check separation from last tree spawn
             box_width = 40
-            min_separation_pixels = 2 * box_width
+            min_separation_pixels = 4 * box_width
             # Convert pixel separation to scroll offset separation
             min_separation_offset = min_separation_pixels / SCROLL_SPEED
             
