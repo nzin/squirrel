@@ -804,7 +804,7 @@ class Mole:
         self.defeated = False  # Track if mole is defeated
         self.underground = True  # Start underground
         self.state_change_time = time.time()
-        self.state_change_interval = random.uniform(3.0, 7.0)  # Random interval between 3-7 seconds
+        self.state_change_interval = random.uniform(3.0, 5.0)  # Random interval between 3-7 seconds
         self.images = []
         self.width = 60
         self.height = 60
