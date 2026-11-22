@@ -98,6 +98,37 @@ func _initialize() -> void:
     check(box.collected, "jumping into a box collects it")
     check(game.acorns >= 4 and game.acorns <= 6, "box gave 1-3 acorns (acorns=%d)" % game.acorns)
 
+    print("standing on a tree")
+    game.reset_game()
+    game.next_box = 1e9
+    game.next_tree = 1e9
+    game.next_skunk = 1e9
+    game.next_bird = 1e9
+    var t2 := TreeProp.new()
+    t2.place(300.0, 425.0)
+    game.layers["trees"].add_child(t2)
+    game.trees.append(t2)
+    # jump just before reaching the tree so we are above it when it arrives
+    var landed := false
+    var rode := 0
+    var jumped := false
+    for i in 600:
+        if not jumped and t2.x - (game.squirrel.x + game.squirrel.w) < 70.0:
+            game.do_jump()
+            jumped = true
+        game.frame(dt)
+        if game.squirrel.game_over:
+            break
+        if jumped and absf((game.squirrel.y + game.squirrel.h) - t2.y) < 1.0 and game.squirrel.x < t2.x + t2.w and game.squirrel.x + game.squirrel.w > t2.x:
+            landed = true
+            rode += 1
+    check(not game.squirrel.game_over, "jumping onto a tree does not kill")
+    check(landed and rode > 10, "squirrel stays on top of the tree (%d frames)" % rode)
+    check(game.squirrel.y == 460.0, "squirrel drops to the ground once the tree has passed")
+
+    print("menu")
+    check(Hud.menu_items().has("Quit"), "menu has a Quit entry")
+
     print("game over and menu")
     game.reset_game()
     var tree := TreeProp.new()

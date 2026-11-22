@@ -143,8 +143,16 @@ func _drop(list: Array, item: Node) -> void:
 
 # ---------------------------------------------------------------- input
 
+## One-way platforms the squirrel can stand on: clouds and tree tops.
+func _platforms() -> Array:
+    var p: Array = []
+    p.append_array(clouds)
+    p.append_array(trees)
+    return p
+
+
 func do_jump() -> void:
-    squirrel.jump(boxes, clouds)
+    squirrel.jump(boxes, _platforms())
 
 
 func do_throw() -> void:
@@ -172,13 +180,19 @@ func _input(event: InputEvent) -> void:
 
 func _menu_input(event: InputEvent) -> void:
     if menu_state == "main":
-        if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
-            menu_selection = (menu_selection + 1) % 2
+        var items := Hud.menu_items()
+        if event.is_action_pressed("ui_up"):
+            menu_selection = (menu_selection + items.size() - 1) % items.size()
+        elif event.is_action_pressed("ui_down"):
+            menu_selection = (menu_selection + 1) % items.size()
         elif event.is_action_pressed("ui_accept"):
-            if menu_selection == 0:
-                reset_game()
-            else:
-                menu_state = "controls"
+            match items[menu_selection]:
+                "Restart":
+                    reset_game()
+                "Show Controls":
+                    menu_state = "controls"
+                "Quit":
+                    get_tree().quit()
     elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
         menu_state = "main"
 
@@ -197,7 +211,7 @@ func frame(delta: float) -> void:
         _spawn_ground_enemies()
         _spawn_birds()
 
-    squirrel.update(boxes, clouds)
+    squirrel.update(boxes, _platforms())
     if squirrel.game_over and not over_started:
         over_started = true
         over_elapsed = 0.0

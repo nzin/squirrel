@@ -2,7 +2,13 @@ class_name Hud
 extends CanvasLayer
 ## Score / acorn counters, the "GAME OVER" banner and the restart/controls menu.
 
-const MENU_ITEMS := ["Restart", "Show Controls"]
+## "Quit" is meaningless in a browser tab, so the web build leaves it out.
+static func menu_items() -> Array[String]:
+    var items: Array[String] = ["Restart", "Show Controls"]
+    if not OS.has_feature("web"):
+        items.append("Quit")
+    return items
+
 const CONTROLS := [
     "SPACE - Jump",
     "SHIFT - Throw Acorn",
@@ -62,9 +68,10 @@ func _rebuild_menu(menu_state: String, selection: int, score: int) -> void:
     if menu_state == "main":
         menu_root.add_child(_centered("GAME OVER", 64, Color.RED, 150))
         menu_root.add_child(_centered("Final Score: %d" % score, 30, Color.WHITE, 220))
-        for i in MENU_ITEMS.size():
+        var items := menu_items()
+        for i in items.size():
             var color := Color.YELLOW if i == selection else Color.WHITE
-            menu_root.add_child(_centered(MENU_ITEMS[i], 44, color, 300 + i * 60))
+            menu_root.add_child(_centered(items[i], 44, color, 300 + i * 60))
             if i == selection:
                 menu_root.add_child(_centered(">", 44, Color.YELLOW, 300 + i * 60, Cfg.SCREEN_W / 2 - 180))
         menu_root.add_child(_centered("Use UP/DOWN to navigate, ENTER/SPACE to select", 24, Color(0.78, 0.78, 0.78), Cfg.SCREEN_H - 50))
