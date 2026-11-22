@@ -26,6 +26,14 @@ documented**: `squirrel.png`, `skunk_*`, `beaver*`, `croco*`, `mole*`, `bird_*`,
 Before any public release, find where each came from (or replace it) and
 record it here. `misc/` holds the source files of some of them.
 
+## Thanks
+
+Some characters used in local builds are by **Robert Brooks, [Game Developer
+Studio](https://www.gamedeveloperstudio.com)** - hand-drawn 2D game assets
+sold (and sometimes given away) on his store and showcased on his YouTube channel
+[@gamedeveloperstudio](https://www.youtube.com/@gamedeveloperstudio/videos).
+Please support his work by buying the packs rather than copying them.
+
 ## Local-only licensed art (NOT in the repository)
 
 `godot/private/` is git-ignored. Whatever lives there is optional: the game
