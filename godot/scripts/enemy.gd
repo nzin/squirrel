@@ -102,11 +102,20 @@ const KINDS := {
         "frames": ["beaver1.png", "beaver2.png", "beaver3.png"],
         "interval": 0.2, "random_frames": false, "forward": 0.0, "fall_vx": -1.0,
     },
-    "boss_croco": {
+    # The second boss is a cleaver-wielding boar - but its art is licensed and kept
+    # out of the public repo (godot/private/, see CREDITS.md). Without those files
+    # it falls back to a giant croco (the defaults below); with them the "private"
+    # entry overrides frames, size and hitbox.
+    "boss_boar": {
         "hit": Rect2(0.07, 0.42, 0.86, 0.57), "coins": 60, "boss": true,
         "w": 230.0, "h": 136.0, "air": false, "hp": 14,
         "frames": ["croco1.png", "croco2.png", "croco3.png"],
         "interval": 0.5, "random_frames": false, "forward": 0.0, "fall_vx": -1.0,
+        "private": {
+            "frames": ["res://private/boar_1.png", "res://private/boar_2.png", "res://private/boar_3.png"],
+            "w": 125.0, "h": 140.0, "hit": Rect2(0.06, 0.12, 0.75, 0.83),  # 116 px tall: still jumpable
+            "interval": 0.28,
+        },
     },
     "boss_skunk": {
         "hit": Rect2(0.04, 0.53, 0.84, 0.47), "coins": 80, "boss": true,
@@ -119,7 +128,7 @@ const KINDS := {
 const DEFEAT_HOP_HEIGHT := 20.0
 
 # One boss every 3rd run, cycling through BOSSES.
-const BOSSES: Array[String] = ["boss_beaver", "boss_croco", "boss_skunk"]
+const BOSSES: Array[String] = ["boss_beaver", "boss_boar", "boss_skunk"]
 const BOSS_STOP_MARGIN := 40.0
 const BOSS_IDLE_TIME := 2.0
 const BOSS_WARN_TIME := 0.8
@@ -199,6 +208,14 @@ static func create(enemy_kind: String, px: float, py: float) -> Enemy:
     return e
 
 
+## True when every frame of the optional local-only art of `kind_cfg` is present.
+static func private_art_available(kind_cfg: Dictionary) -> bool:
+    for f: String in kind_cfg["private"]["frames"]:
+        if not ResourceLoader.exists(f):
+            return false
+    return true
+
+
 ## The boss for the n-th boss run (0-based). Later cycles have more hp.
 static func create_boss(tier: int, px: float, py: float) -> Enemy:
     var e := Enemy.create(BOSSES[tier % BOSSES.size()], px, py)
@@ -210,6 +227,8 @@ static func create_boss(tier: int, px: float, py: float) -> Enemy:
 func setup(enemy_kind: String, px: float, py: float) -> void:
     kind = enemy_kind
     cfg = KINDS[kind]
+    if cfg.has("private") and Enemy.private_art_available(cfg):
+        cfg = cfg.merged(cfg["private"], true)  # the optional local-only art replaces the stand-in
     w = cfg["w"]
     h = cfg["h"]
     hp = cfg["hp"]

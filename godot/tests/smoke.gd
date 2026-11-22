@@ -846,6 +846,14 @@ func _initialize() -> void:
     check(game.complete_life and game.loadout.lives == 4 and game.hud.banner.text.contains("+1 life"), "defeating a boss earns a life")
     check(Enemy.KINDS["skunk"]["coins"] >= 3 and Enemy.KINDS["ptero"]["coins"] >= 8 and Enemy.KINDS["croco"]["coins"] > Enemy.KINDS["skunk"]["coins"], "kills pay more, depending on the opponent")
 
+    print("bosses")
+    var boss_kinds: Array[String] = []
+    for tier in 6:
+        var bb := Enemy.create_boss(tier, 0.0, 0.0)
+        boss_kinds.append(bb.kind)
+        check(bb.rect().size.y <= 125.0 and bb.hp >= 10, "boss %s (tier %d) is jumpable (%.0f px tall) and tough (%d hp)" % [bb.kind, tier, bb.rect().size.y, bb.hp])
+    check(boss_kinds == ["boss_beaver", "boss_boar", "boss_skunk", "boss_beaver", "boss_boar", "boss_skunk"], "bosses cycle beaver, boar, skunk %s" % [boss_kinds])
+
     print("pause menu (ESC)")
     game.new_game()
     _quiet(game)
@@ -898,6 +906,24 @@ func _initialize() -> void:
     down.pressed = true
     game._menu_input(down)
     check(game.shop_selection == 1, "Down moves the shop selection")
+    check(game.hud.shop_dwarf.visible, "the dwarf shopkeeper stands in the shop")
+    game.new_game()
+    game._enter_shop()
+    check(game.shop_message == "Welcome! Take a look at my wares.", "he greets you")
+    game.loadout.coins = 100
+    game.shop_selection = 1
+    game._menu_input(enter)
+    game.frame(dt)
+    check(game.shop_mood == "happy" and game.hud.shop_mood_shown == "happy", "he is delighted when you buy something")
+    game._menu_input(down)
+    game.frame(dt)
+    check(game.shop_mood == "idle" and game.shop_message == "" and game.hud.shop_mood_shown != "happy", "...and calms down when you browse again")
+    game.new_game()
+    game.frame(dt)
+    check(not game.hud.shop_dwarf.visible, "he stays in the shop")
+    Lang.current = "fr"
+    check(Lang.t("Welcome! Take a look at my wares.").begins_with("Bienvenue") and Lang.t("Ready for the next run?").begins_with("Prêt"), "the dwarf speaks French too")
+    Lang.current = "en"
     game.new_game()
 
     DirAccess.remove_absolute(ProjectSettings.globalize_path(Profile.save_path))

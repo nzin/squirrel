@@ -1,4 +1,6 @@
 .godot/
 build/
 *.translation
+# licensed art that must not be redistributed (see CREDITS.md)
+private/
 .DS_Store

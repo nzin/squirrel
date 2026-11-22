@@ -47,6 +47,8 @@ const FR := {
     "Press ESC, ENTER, or SPACE to return": "ÉCHAP, ENTRÉE ou ESPACE pour revenir",
     # shop
     "SHOP": "BOUTIQUE",
+    "Welcome! Take a look at my wares.": "Bienvenue ! Jetez un œil à mes marchandises.",
+    "Ready for the next run?": "Prêt pour la manche suivante ?",
     "EQUIPPED": "ÉQUIPÉ",
     "OWNED": "POSSÉDÉ",
     "MAX": "MAX",
@@ -67,7 +69,7 @@ const FR := {
     "Matrix Fist": "Poing Matrix",
     "Pack of 3 uses (key F): slow-motion dash across the screen, punching everything for 3 damage.": "Lot de 3 usages (touche F) : ruée au ralenti à travers l'écran, tout est frappé pour 3 dégâts.",
     "owned": "possédés",
-    "Bigger Pouch (+1 start acorn)": "Grande bourse (+1 gland au départ)",
+    "Bigger Pouch (+1 start acorn)": "Grande bourse (+1 gland)",
     "Start every run with %d acorns (level %d/%d).": "Chaque manche commence avec %d glands (niveau %d/%d).",
     "Costs 1 acorn per throw.": "Coûte 1 gland par lancer.",
     "Costs %d acorns per throw.": "Coûte %d glands par lancer.",

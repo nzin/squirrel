@@ -26,5 +26,6 @@ static var time_scale := 1.0
 
 
 static func tex(file: String) -> Texture2D:
-    # load() caches resources, so repeated spawns never hit the disk again
-    return load(ASSET_DIR + file)
+    # load() caches resources, so repeated spawns never hit the disk again.
+    # A full "res://..." path is used as is (the optional git-ignored private/ art).
+    return load(file if file.begins_with("res://") else ASSET_DIR + file)

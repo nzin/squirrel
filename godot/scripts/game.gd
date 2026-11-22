@@ -49,7 +49,7 @@ const BEAVER_FROM_RUN := 2
 const MOLE_FROM_RUN := 3
 const CROCO_FROM_RUN := 4
 const CROCO_SPAWN_DISTANCE := 2300
-const BEE_FROM_RUN := 3          # swarms of 3
+const BEE_FROM_RUN := 8          # swarms of 3
 const BEE_SPAWN_DISTANCE := 1700
 const HEDGEHOG_FROM_RUN := 5
 const HEDGEHOG_SPAWN_DISTANCE := 2400
@@ -123,6 +123,7 @@ var controls_return := "main"
 var menu_selection := 0
 var shop_selection := 0
 var shop_message := ""
+var shop_mood := "idle"        # the dwarf: "idle" | "happy" (after a purchase)
 var fade := 0.0                # 0 = clear, 1 = black
 var fade_dir := 0              # +1 fading out, -1 fading in, 0 idle
 var _fade_action := Callable()
@@ -319,7 +320,8 @@ func _enter_shop() -> void:
     phase = "shop"
     menu_state = "shop"
     shop_selection = 0
-    shop_message = ""
+    shop_mood = "idle"
+    shop_message = Lang.t("Welcome! Take a look at my wares.")
 
 
 func _begin_next_run() -> void:
@@ -492,15 +494,19 @@ func _menu_input(event: InputEvent) -> void:
             if event.is_action_pressed("ui_up"):
                 shop_selection = (shop_selection + rows.size() - 1) % rows.size()
                 shop_message = ""
+                shop_mood = "idle"
             elif event.is_action_pressed("ui_down"):
                 shop_selection = (shop_selection + 1) % rows.size()
                 shop_message = ""
+                shop_mood = "idle"
             elif event.is_action_pressed("ui_accept"):
                 var row_id: String = rows[shop_selection]["id"]
                 if row_id == Shop.NEXT_RUN_ROW:
                     start_fade(_begin_next_run)
                 else:
+                    var coins_before := loadout.coins
                     shop_message = Shop.activate(loadout, row_id)
+                    shop_mood = "happy" if loadout.coins < coins_before else "idle"  # he likes being paid
         _:
             if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
                 menu_state = controls_return
@@ -868,7 +874,7 @@ func _hud_state() -> Dictionary:
         "menu_state": menu_state, "selection": menu_selection,
         "menu_items": menu_items().map(func(i: Dictionary) -> String: return i["text"]),
         "shop_rows": _shop_rows() if phase == "shop" else [], "shop_selection": shop_selection,
-        "shop_message": shop_message,
+        "shop_message": shop_message, "shop_mood": shop_mood,
     }
 
 
