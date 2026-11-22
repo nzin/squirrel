@@ -25,5 +25,13 @@ const DEFS := {
 }
 
 const START_AMMO := 3
+## Matrix Fist: a one-use consumable (each purchase = one charge), key F.
+const FIST_PRICE := 45   # one purchase = FIST_PACK charges
+const FIST_PACK := 3
+const FIST_DAMAGE := 3   # per hit; every enemy / tree on the way is hit once per leg
+## Lives: you start a game with 3 and can hold at most 6.
+const START_LIVES := 3
+const MAX_LIVES := 6
+const LIFE_PRICE := 60
 ## Price of each "+1 starting acorn" level; its length is the maximum level.
 const AMMO_UPGRADE_PRICES: Array[int] = [10, 25, 45, 70, 100]

@@ -1,9 +1,38 @@
+class_name Game
 extends Node2D
-## Main game: owns the world state, spawner, collisions and game-over flow.
+## Main game. A *game* is a series of timed *runs*:
+##   run (60 s, harder every time; a boss ends every 3rd run)
+##     -> fade -> shop (spend coins) -> fade -> next run ... until you die.
+## Coins, weapons and upgrades (Loadout) last for one game only; best score,
+## furthest run and the language (Profile) are saved.
 ## One fixed 60 Hz `frame()` per physics tick, in the same order as the
-## original pygame main loop so the feel is identical.
+## original prototype's main loop so the feel is identical.
 
-const MENU_DELAY := 3.0  # seconds of "GAME OVER" before the menu appears
+const MENU_DELAY := 3.0      # seconds of "GAME OVER" before the menu appears
+const RUN_SECONDS := 60.0
+const BOSS_EVERY := 3        # every 3rd run ends with a boss
+const BOSS_AMMO := 12        # acorns topped up to this when the boss arrives
+const RUN_BONUS_PER_RUN := 5 # completion bonus = this x run number (coins)
+const COMPLETE_DELAY := 1.8  # "RUN COMPLETE" banner time before the fade
+const RESPAWN_DELAY := 1.4   # seconds lying down before getting back up (lives left)
+const INVULN_TIME := 2.5     # blinking invulnerability after a respawn
+const FADE_TIME := 0.45
+const ANNOUNCE_TIME := 2.0
+
+# Matrix Fist timeline (real seconds): 0-1 slow down, 1-2 hold, 2-3 dash out
+# across the whole screen, 3-4 dash back, 4-5 speed back up. Everything on the
+# way gets punched (once per leg). The dash happens in slow motion.
+const FIST_DURATION := 5.0
+const FIST_SLOW := 0.1       # world speed at the bottom of the slow-down
+const FIST_DASH_AT := 2.0
+const FIST_PUNCH_AT := 3.0
+const FIST_BACK_AT := 4.0
+const FIST_REACH := 50.0     # how far in front of the squirrel the fist reaches
+const FIST_PAD := 10.0       # extra height above/below the squirrel that still gets hit
+const FIST_END_X := Cfg.SCREEN_W - 50.0  # the far end of the dash (screen's right side)
+const BOX_COINS := 2
+const RAINBOW_COINS := 5
+const TREE_COINS := 2        # coins for smashing a tree with the fist
 
 # spawn gaps in scroll-offset units (base .. base + extra)
 const BOX_SPAWN_DISTANCE := 1200
@@ -13,26 +42,56 @@ const BEAVER_SPAWN_DISTANCE := 1700
 const MOLE_SPAWN_DISTANCE := 1800
 const BIRD_SPAWN_DISTANCE := 1500
 const PTERO_SPAWN_DISTANCE := 2000
-# score gates: skunks until BEAVER_SCORE, then beavers; moles from MOLE_SCORE
-const BEAVER_SCORE := 10
-const MOLE_SCORE := 15
+# opponents join the mix as the runs go on
+const BEAVER_FROM_RUN := 2
+const MOLE_FROM_RUN := 3
+const CROCO_FROM_RUN := 4
+const CROCO_SPAWN_DISTANCE := 2300
+const BEE_FROM_RUN := 3          # swarms of 3
+const BEE_SPAWN_DISTANCE := 1700
+const HEDGEHOG_FROM_RUN := 5
+const HEDGEHOG_SPAWN_DISTANCE := 2400
+const FOX_FROM_RUN := 9
+const FOX_SPAWN_DISTANCE := 2600
+const OWL_FROM_RUN := 7
+const OWL_SPAWN_DISTANCE := 2800
 
 const LAYERS := ["trees", "ground", "air", "clouds", "rainbow", "boxes", "popups", "player", "shots"]
 
-# --- persistent progress (coins, owned weapons, upgrades) ---
-var profile := Profile.new()
+# --- game state (whole game) ---
+var profile := Profile.new()   # saved: best score / run, language
+var loadout := Loadout.new()   # this game only: coins, weapons, upgrades
+var run := 1
+var score := 0
+var phase := "run"             # "run" | "run_complete" | "shop"
+var paused := false
 
 # --- run state ---
 var acorns := Weapons.START_AMMO
-var weapon := "acorn"  # equipped weapon id (see Weapons)
-var score := 0
+var weapon := "acorn"          # equipped weapon id (see Weapons)
+var run_time := 0.0
+var scroll_speed := Cfg.SCROLL_SPEED
+var gap_factor := 1.0          # < 1 = enemies spawn closer together
 var scroll_offset := 0.0
+var boss: Enemy = null
+var boss_spawned := false
+var complete_timer := 0.0
+var complete_bonus := 0
+var complete_boss := false
+var complete_life := false
+var announce_text := ""
+var announce_timer := 0.0
 
 var next_box := 200.0
 var next_tree := 500.0
 var next_skunk := 1000.0
 var next_beaver := 1000.0
 var next_mole := 1200.0
+var next_croco := 1500.0
+var next_bee := 1400.0
+var next_hedgehog := 1800.0
+var next_fox := 2000.0
+var next_owl := 1800.0
 var next_bird := 800.0
 var next_ptero := 1500.0
 var last_box_spawn := -INF
@@ -40,10 +99,31 @@ var last_tree_spawn := -INF
 
 var over_started := false
 var over_elapsed := 0.0
-var menu_state := "main"  # "main" | "controls" | "shop"
+var invuln_timer := 0.0
+var next_life := INF          # scroll offset where this run's 1UP heart shows up
+var life_spawned := false
+
+# --- Matrix Fist ---
+var fist_active := false
+var fist_t := 0.0
+var fist_x0 := Squirrel.START_X
+var fist_x1 := Squirrel.START_X
+var fist_y0 := 0.0
+var fist_y1 := 0.0
+var fist_dash_started := false
+var fist_turned := false      # the return leg has begun
+var fist_hit := {}            # instance ids already punched on this leg
+var _ghost_tick := 0
+
+# --- menus / transitions ---
+var menu_state := "main"       # "main" (game over) | "pause" | "shop" | "controls"
+var controls_return := "main"
 var menu_selection := 0
 var shop_selection := 0
 var shop_message := ""
+var fade := 0.0                # 0 = clear, 1 = black
+var fade_dir := 0              # +1 fading out, -1 fading in, 0 idle
+var _fade_action := Callable()
 
 # --- world ---
 var squirrel: Squirrel
@@ -55,9 +135,13 @@ var shots: Array[Shot] = []
 var boxes: Array[Box] = []
 var trees: Array[TreeProp] = []
 var enemies: Array[Enemy] = []
+var enemy_shots: Array[EnemyShot] = []
+var ghosts: Array[Ghost] = []
+var punch_fx: Array[PunchFx] = []
 var popups: Array[PopupAcorn] = []
 var clouds: Array[Cloud] = []
 var rainbows: Array[RainbowAcorn] = []
+var life_pickups: Array[LifePickup] = []
 
 
 func _ready() -> void:
@@ -83,13 +167,14 @@ func _ready() -> void:
     hud = Hud.new()
     add_child(hud)
 
-    reset_game()
+    new_game()
 
 
 func _setup_input() -> void:
     _add_key_action("jump", KEY_SPACE)
     _add_key_action("throw", KEY_SHIFT)
     _add_key_action("weapon", KEY_Q)
+    _add_key_action("fist", KEY_F)
 
 
 func _add_key_action(action: String, keycode: Key) -> void:
@@ -100,22 +185,51 @@ func _add_key_action(action: String, keycode: Key) -> void:
     InputMap.action_add_event(action, ev)
 
 
-# ---------------------------------------------------------------- state
+# ---------------------------------------------------------------- lifecycle
 
-func reset_game() -> void:
-    scroll_offset = 0.0
-    acorns = profile.start_ammo()
-    weapon = profile.equipped
+## Brand new game: no coins, no weapons, no upgrades, run 1.
+func new_game() -> void:
+    loadout = Loadout.new()
+    run = 1
     score = 0
+    paused = false
+    start_run()
+
+
+static func is_boss_run(run_number: int) -> bool:
+    return run_number % BOSS_EVERY == 0
+
+
+## Reset the world for `run` (difficulty scales with the run number).
+func start_run() -> void:
+    phase = "run"
+    paused = false
+    run_time = 0.0
+    scroll_offset = 0.0
+    boss = null
+    boss_spawned = false
+    announce_text = ""
+    announce_timer = 0.0
+    acorns = loadout.start_ammo()
+    weapon = loadout.equipped
+    var d := float(run - 1)
+    scroll_speed = Cfg.SCROLL_SPEED + 0.25 * minf(d, 8.0)
+    gap_factor = 1.0 / (1.0 + 0.12 * d)
     next_box = 200.0
     next_tree = 500.0
     next_skunk = 1000.0
     next_beaver = 1000.0
     next_mole = 1200.0
+    next_croco = 1500.0
+    next_bee = 1400.0
+    next_hedgehog = 1800.0
+    next_fox = 2000.0
+    next_owl = 1800.0
     next_bird = 800.0
     next_ptero = 1500.0
     last_box_spawn = -INF
     last_tree_spawn = -INF
+    _end_fist()
     over_started = false
     over_elapsed = 0.0
     menu_state = "main"
@@ -126,9 +240,17 @@ func reset_game() -> void:
     _clear(boxes)
     _clear(trees)
     _clear(enemies)
+    _clear(enemy_shots)
+    _clear(ghosts)
+    _clear(punch_fx)
     _clear(popups)
     _clear(clouds)
     _clear(rainbows)
+    _clear(life_pickups)
+    invuln_timer = 0.0
+    life_spawned = false
+    # about every other run hides a 1UP heart on the top cloud row
+    next_life = float(randi_range(2500, 7500)) if randf() < 0.5 else INF
 
     for row_y: float in Cfg.CLOUD_ROWS:
         var cx := 0.0
@@ -149,6 +271,80 @@ func _clear(list: Array) -> void:
 func _drop(list: Array, item: Node) -> void:
     list.erase(item)
     item.queue_free()
+
+
+## Called every tick of a live run: the 60 s clock, the boss and the end of the run.
+func _advance_run(delta: float) -> void:
+    run_time += delta
+    if announce_timer > 0.0:
+        announce_timer -= delta
+    if boss_spawned:
+        if boss != null and boss.defeated:
+            _complete_run(true)
+    elif run_time >= RUN_SECONDS:
+        if is_boss_run(run):
+            _spawn_boss()
+        else:
+            _complete_run(false)
+
+
+func _spawn_boss() -> void:
+    boss_spawned = true
+    var tier := run / BOSS_EVERY - 1
+    boss = Enemy.create_boss(tier, Cfg.SPAWN_X, 0.0)
+    boss.scale_for_run(run)  # (bosses only learn to enrage from run 4)
+    boss.y = Cfg.SOIL_Y - boss.h
+    boss.sync()
+    layers["ground"].add_child(boss)
+    enemies.append(boss)
+    acorns = maxi(acorns, BOSS_AMMO)
+    announce_text = Lang.t("WARNING: BOSS!")
+    announce_timer = ANNOUNCE_TIME
+
+
+func _complete_run(boss_defeated: bool) -> void:
+    _end_fist()
+    phase = "run_complete"
+    complete_timer = 0.0
+    complete_boss = boss_defeated
+    complete_bonus = RUN_BONUS_PER_RUN * run
+    loadout.add_coins(complete_bonus)
+    complete_life = boss_defeated and loadout.add_life()  # beating a boss earns a life
+    profile.record_game(score, run)
+
+
+func _enter_shop() -> void:
+    phase = "shop"
+    menu_state = "shop"
+    shop_selection = 0
+    shop_message = ""
+
+
+func _begin_next_run() -> void:
+    run += 1
+    start_run()
+
+
+## Fade to black, run `action` while the screen is black, then fade back in.
+func start_fade(action: Callable) -> void:
+    if fade_dir != 0:
+        return
+    fade_dir = 1
+    _fade_action = action
+
+
+func _update_fade(delta: float) -> void:
+    if fade_dir == 0:
+        return
+    fade = clampf(fade + fade_dir * delta / FADE_TIME, 0.0, 1.0)
+    if fade_dir > 0 and fade >= 1.0:
+        var action := _fade_action
+        _fade_action = Callable()
+        if action.is_valid():
+            action.call()
+        fade_dir = -1
+    elif fade_dir < 0 and fade <= 0.0:
+        fade_dir = 0
 
 
 # ---------------------------------------------------------------- input
@@ -198,48 +394,99 @@ func _add_shot(s: Shot) -> void:
 func cycle_weapon() -> void:
     var owned: Array[String] = []
     for id in Weapons.ORDER:
-        if profile.owns(id):
+        if loadout.owns(id):
             owned.append(id)
     weapon = owned[(owned.find(weapon) + 1) % owned.size()]
-    profile.equip(weapon)
+    loadout.equip(weapon)
 
 
 func _input(event: InputEvent) -> void:
     if event is InputEventKey and (event.is_echo() or not event.is_pressed()):
         return
-    if squirrel.game_over:
-        if over_elapsed >= MENU_DELAY:
-            _menu_input(event)
+    if fade_dir != 0:
+        return  # ignore keys while the screen is fading
+    if paused or phase == "shop":
+        _menu_input(event)
+    elif phase == "run":
+        if squirrel.game_over:
+            if loadout.lives <= 0 and over_elapsed >= MENU_DELAY:
+                _menu_input(event)
+        elif event.is_action_pressed("ui_cancel"):
+            pause()
+        elif fist_active:
+            pass  # the Matrix Fist sequence has taken over the controls
+        elif event.is_action_pressed("jump"):
+            do_jump()
+        elif event.is_action_pressed("throw"):
+            do_throw()
+        elif event.is_action_pressed("weapon"):
+            cycle_weapon()
+        elif event.is_action_pressed("fist"):
+            use_fist()
+
+
+func pause() -> void:
+    if phase != "run" or squirrel.game_over:
         return
-    if event.is_action_pressed("jump"):
-        do_jump()
-    elif event.is_action_pressed("throw"):
-        do_throw()
-    elif event.is_action_pressed("weapon"):
-        cycle_weapon()
+    paused = true
+    menu_state = "pause"
+    menu_selection = 0
+
+
+func resume() -> void:
+    paused = false
+    menu_state = "main"
+
+
+## Entries of the pause / game-over menus: [{id, text}].
+func menu_items() -> Array[Dictionary]:
+    var items: Array[Dictionary] = []
+    if menu_state == "pause":
+        items.append({"id": "continue", "text": Lang.t("Continue")})
+    items.append({"id": "restart", "text": Lang.t("Restart")})
+    items.append({"id": "language", "text": Lang.t("Language: %s", [Lang.native_name()])})
+    items.append({"id": "controls", "text": Lang.t("Show Controls")})
+    if not OS.has_feature("web"):  # no "quit" in a browser tab
+        items.append({"id": "quit", "text": Lang.t("Quit")})
+    return items
+
+
+func toggle_language() -> void:
+    profile.set_language(Lang.next_language())
+
+
+func _shop_rows() -> Array[Dictionary]:
+    return Shop.rows(loadout, run + 1, is_boss_run(run + 1))
 
 
 func _menu_input(event: InputEvent) -> void:
     match menu_state:
-        "main":
-            var items := Hud.menu_items()
+        "main", "pause":
+            var items := menu_items()
+            var id: String = items[menu_selection]["id"]
             if event.is_action_pressed("ui_up"):
                 menu_selection = (menu_selection + items.size() - 1) % items.size()
             elif event.is_action_pressed("ui_down"):
                 menu_selection = (menu_selection + 1) % items.size()
+            elif id == "language" and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+                toggle_language()
             elif event.is_action_pressed("ui_accept"):
-                match items[menu_selection]:
-                    "Restart":
-                        reset_game()
-                    "Shop":
-                        menu_state = "shop"
-                        shop_message = ""
-                    "Show Controls":
+                match id:
+                    "continue":
+                        resume()
+                    "restart":
+                        start_fade(new_game)
+                    "language":
+                        toggle_language()
+                    "controls":
+                        controls_return = menu_state
                         menu_state = "controls"
-                    "Quit":
+                    "quit":
                         get_tree().quit()
+            elif event.is_action_pressed("ui_cancel") and menu_state == "pause":
+                resume()
         "shop":
-            var rows := Shop.rows(profile)
+            var rows := _shop_rows()
             if event.is_action_pressed("ui_up"):
                 shop_selection = (shop_selection + rows.size() - 1) % rows.size()
                 shop_message = ""
@@ -247,12 +494,188 @@ func _menu_input(event: InputEvent) -> void:
                 shop_selection = (shop_selection + 1) % rows.size()
                 shop_message = ""
             elif event.is_action_pressed("ui_accept"):
-                shop_message = Shop.activate(profile, rows[shop_selection]["id"])
-            elif event.is_action_pressed("ui_cancel"):
-                menu_state = "main"
+                var row_id: String = rows[shop_selection]["id"]
+                if row_id == Shop.NEXT_RUN_ROW:
+                    start_fade(_begin_next_run)
+                else:
+                    shop_message = Shop.activate(loadout, row_id)
         _:
             if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
-                menu_state = "main"
+                menu_state = controls_return
+
+
+# ---------------------------------------------------------------- Matrix Fist
+
+## World speed during the sequence: eases down in 0-1 s, holds, eases back in 4-5 s.
+static func fist_time_scale(t: float) -> float:
+    if t < 1.0:
+        return lerpf(1.0, FIST_SLOW, smoothstep(0.0, 1.0, t))
+    if t < FIST_BACK_AT:
+        return FIST_SLOW
+    if t < FIST_DURATION:
+        return lerpf(FIST_SLOW, 1.0, smoothstep(0.0, 1.0, t - FIST_BACK_AT))
+    return 1.0
+
+
+## Press F: spend one charge and start the slow-motion punch. False if it can't start.
+func use_fist() -> bool:
+    if fist_active or loadout.fists <= 0 or phase != "run" or paused or squirrel.game_over:
+        return false
+    loadout.fists -= 1
+    fist_active = true
+    fist_t = 0.0
+    fist_x0 = squirrel.x
+    fist_dash_started = false
+    fist_turned = false
+    fist_hit.clear()
+    return true
+
+
+func _end_fist() -> void:
+    if fist_active and squirrel != null:
+        squirrel.x = fist_x0
+        squirrel.prev_x = fist_x0
+        squirrel.sync()
+    fist_active = false
+    fist_t = 0.0
+    Cfg.time_scale = 1.0
+
+
+func _update_fist_clock(delta: float) -> void:
+    if not fist_active:
+        Cfg.time_scale = 1.0
+        return
+    fist_t += delta  # real time: the sequence always lasts 5 s whatever the slow-mo
+    if fist_t >= FIST_DURATION:
+        _end_fist()
+        return
+    Cfg.time_scale = fist_time_scale(fist_t)
+
+
+## True during the dash out and back (2-4 s): invulnerable and intangible.
+func _fist_ghosted() -> bool:
+    return fist_active and fist_t >= FIST_DASH_AT and fist_t < FIST_BACK_AT
+
+
+## Move the squirrel along the dash: out across the screen (2-3 s) and back
+## (3-4 s), punching everything on the way. It flies level with the nearest
+## target (never above it) and returns to where it was.
+func _apply_fist_motion() -> void:
+    if not fist_active or squirrel.game_over or fist_t < FIST_DASH_AT:
+        return
+    if not fist_dash_started:
+        fist_dash_started = true
+        fist_y0 = squirrel.y
+        _choose_dash_height()
+    var prev_x := squirrel.x
+    if fist_t < FIST_PUNCH_AT:
+        var u := 1.0 - pow(1.0 - (fist_t - FIST_DASH_AT), 3.0)  # fast start, ease out
+        squirrel.x = lerpf(fist_x0, fist_x1, u)
+        # reach the target height in the first quarter, so the whole run is level
+        squirrel.y = lerpf(fist_y0, fist_y1, smoothstep(0.0, 1.0, (fist_t - FIST_DASH_AT) / 0.25))
+        _spawn_ghost()
+    elif fist_t < FIST_BACK_AT:
+        if not fist_turned:  # turnaround: everything may be hit again on the way back
+            fist_turned = true
+            fist_hit.clear()
+            _spawn_fx(Vector2(squirrel.x + squirrel.w, squirrel.y + squirrel.h / 2.0))
+        var u2 := smoothstep(0.0, 1.0, fist_t - FIST_PUNCH_AT)
+        squirrel.x = lerpf(fist_x1, fist_x0, u2)
+        # ...and only come back down/up in the last quarter of the return leg
+        squirrel.y = lerpf(fist_y1, fist_y0, smoothstep(0.0, 1.0, (fist_t - FIST_PUNCH_AT - 0.75) / 0.25))
+        _spawn_ghost()
+    else:
+        squirrel.x = fist_x0
+        squirrel.y = fist_y0
+    _fist_strike(prev_x)
+    squirrel.velocity_y = 0.0
+    squirrel.prev_x = squirrel.x
+    squirrel.prev_y = squirrel.y
+    squirrel.sync()
+
+
+## The dash always runs to the far side of the screen; the height follows the
+## nearest enemy or tree ahead (ground level, or a flyer's height).
+func _choose_dash_height() -> void:
+    fist_x1 = maxf(fist_x0 + 40.0, FIST_END_X - squirrel.w)
+    fist_y1 = fist_y0
+    var best: Entity = null
+    var best_left := INF
+    var candidates: Array = []
+    candidates.append_array(trees)
+    for e: Enemy in enemies:
+        if e.hittable():
+            candidates.append(e)
+    for c: Entity in candidates:
+        var left := c.rect().position.x
+        if c.active and left > squirrel.x + squirrel.w and left < Cfg.SCREEN_W - 10.0 and left < best_left:
+            best = c
+            best_left = left
+    if best == null:
+        return
+    if best is Enemy and (best as Enemy).air:
+        fist_y1 = clampf(best.rect().get_center().y - squirrel.h / 2.0, 40.0, squirrel.ground_y)
+    else:
+        fist_y1 = squirrel.ground_y
+
+
+## Punch everything the squirrel swept through since last tick (each thing once
+## per leg): enemies take 3 damage (shields don't help), trees are smashed and
+## enemy projectiles are destroyed.
+func _fist_strike(prev_x: float) -> void:
+    var cur_x := squirrel.x
+    var going_right := cur_x >= prev_x
+    var left := minf(prev_x, cur_x) - (0.0 if going_right else FIST_REACH)
+    var width := absf(cur_x - prev_x) + squirrel.w + FIST_REACH
+    var sweep := Rect2(left, squirrel.y - FIST_PAD, width, squirrel.h + 2.0 * FIST_PAD)
+    for e: Enemy in enemies:
+        if e.hittable() and not fist_hit.has(e.get_instance_id()) and e.rect().intersects(sweep):
+            fist_hit[e.get_instance_id()] = true
+            _damage_enemy(e, Weapons.FIST_DAMAGE)
+            _spawn_fx(e.rect().get_center())
+    for t: TreeProp in trees:
+        if t.active and not fist_hit.has(t.get_instance_id()) and t.rect().intersects(sweep):
+            fist_hit[t.get_instance_id()] = true
+            t.active = false
+            loadout.add_coins(TREE_COINS)
+            _spawn_fx(t.rect().get_center())
+    for es: EnemyShot in enemy_shots:
+        if es.active and es.rect().intersects(sweep):
+            es.active = false
+
+
+func _spawn_fx(at: Vector2) -> void:
+    var fx := PunchFx.new()
+    fx.position = at
+    layers["shots"].add_child(fx)
+    punch_fx.append(fx)
+
+
+func _spawn_ghost() -> void:
+    _ghost_tick += 1
+    if _ghost_tick % 2 != 0:
+        return
+    var g := Ghost.create(Cfg.tex("squirrel.png"), squirrel.x, squirrel.y, squirrel.w, squirrel.h)
+    layers["player"].add_child(g)
+    layers["player"].move_child(g, 0)  # behind the squirrel
+    ghosts.append(g)
+
+
+## Fade trails and impact effects in real time (not slow-motion time).
+func _tick_fx(real_delta: float) -> void:
+    if invuln_timer > 0.0:  # blink while invulnerable after a respawn
+        invuln_timer = maxf(0.0, invuln_timer - real_delta)
+        squirrel.sprite.modulate.a = 0.35 if int(invuln_timer * 10.0) % 2 == 0 and invuln_timer > 0.0 else 1.0
+    elif squirrel.sprite != null:
+        squirrel.sprite.modulate.a = 1.0
+    for g: Ghost in ghosts.duplicate():
+        if not g.tick(real_delta):
+            ghosts.erase(g)
+            g.queue_free()
+    for f: PunchFx in punch_fx.duplicate():
+        if not f.tick(real_delta):
+            punch_fx.erase(f)
+            f.queue_free()
 
 
 # ---------------------------------------------------------------- frame
@@ -262,19 +685,43 @@ func _physics_process(delta: float) -> void:
 
 
 func frame(delta: float) -> void:
+    _update_fade(delta)
+    # frozen: paused, between runs, or while the screen is fading in/out
+    if paused or phase != "run" or fade_dir != 0:
+        if phase == "run_complete" and fade_dir == 0:
+            complete_timer += delta
+            if complete_timer >= COMPLETE_DELAY:
+                start_fade(_enter_shop)
+        hud.refresh(_hud_state())
+        return
+
+    _update_fist_clock(delta)
+    var ts := Cfg.time_scale      # 1 normally, ~0.1 during the Matrix slow-motion
+    var gd := delta * ts          # "game time" delta
+    var sp := scroll_speed * ts   # scroll this tick
+    _tick_fx(delta)
+
     if not squirrel.game_over:
-        scroll_offset += Cfg.SCROLL_SPEED
+        scroll_offset += sp
         _spawn_boxes()
         _spawn_trees()
         _spawn_ground_enemies()
         _spawn_birds()
+        _spawn_flyers()
 
-    squirrel.update(boxes, _platforms())
+    # while dashing the squirrel is a ghost: it passes through boxes, trees and
+    # enemies (only the ground and the clouds still hold it)
+    var ghosted := _fist_ghosted()
+    squirrel.update([] if ghosted else boxes, clouds if ghosted else _platforms())
+    _apply_fist_motion()
+    if invuln_timer > 0.0 and squirrel.game_over:
+        squirrel.game_over = false  # blinking after a respawn: boxes can't kill either
     _begin_game_over_if_needed()
 
     var on_cloud := squirrel.velocity_y >= 0.0 and squirrel.stands_on(clouds)
     if not squirrel.game_over:
         _spawn_rainbow()
+        _spawn_life_pickup()
         _spawn_ptero(on_cloud)
         _update_shots()
 
@@ -282,24 +729,37 @@ func frame(delta: float) -> void:
     var live := not squirrel.game_over
     for t: TreeProp in trees.duplicate():
         if live:
-            t.update(Cfg.SCROLL_SPEED)
+            t.update(sp)
         if not t.active:
             _drop(trees, t)
     for e: Enemy in enemies.duplicate():
         if live:
-            e.update(Cfg.SCROLL_SPEED, delta)
+            e.update(sp, gd, squirrel.rect())
+            var fired := e.take_shot()
+            if fired != "":
+                _fire_enemy_shot(e, fired)
         if not e.active:
             _drop(enemies, e)
+    for es: EnemyShot in enemy_shots.duplicate():
+        if live:
+            es.update(gd)
+        if not es.active:
+            _drop(enemy_shots, es)
     for c: Cloud in clouds.duplicate():
         if live:
-            c.update(Cfg.SCROLL_SPEED)
+            c.update(sp)
         if not c.active:
             _drop(clouds, c)
     for r: RainbowAcorn in rainbows.duplicate():
         if live:
-            r.update(Cfg.SCROLL_SPEED, delta)
+            r.update(sp, gd)
         if not r.active:
             _drop(rainbows, r)
+    for lp: LifePickup in life_pickups.duplicate():
+        if live:
+            lp.update(sp, gd)
+        if not lp.active:
+            _drop(life_pickups, lp)
     _maintain_clouds()
 
     if live:
@@ -307,33 +767,105 @@ func frame(delta: float) -> void:
     _update_boxes(live)
     for p: PopupAcorn in popups.duplicate():
         if live:
-            p.update(Cfg.SCROLL_SPEED, delta)
+            p.update(sp, gd)
         if not p.active:
             _drop(popups, p)
 
     background.set_scroll(scroll_offset)
     if squirrel.game_over:
         over_elapsed += delta
+        if loadout.lives > 0 and over_elapsed >= RESPAWN_DELAY:
+            _respawn()
+    else:
+        _advance_run(gd)
     hud.refresh(_hud_state())
 
 
+## The squirrel just died: lose a life. With lives left it gets back up after a
+## moment (see _respawn); with none left the game is over.
 func _begin_game_over_if_needed() -> void:
     if squirrel.game_over and not over_started:
         over_started = true
         over_elapsed = 0.0
-        profile.record_score(score)
+        _end_fist()
+        loadout.lives = maxi(0, loadout.lives - 1)
+        if loadout.lives <= 0:
+            profile.record_game(score, run)
+
+
+func _respawn() -> void:
+    squirrel.reset()
+    over_started = false
+    over_elapsed = 0.0
+    invuln_timer = INVULN_TIME
+    # clear the way so the squirrel doesn't respawn into the thing that killed it
+    for t: TreeProp in trees:
+        if t.rect().position.x < 420.0:
+            t.active = false
+    for e: Enemy in enemies:
+        if e.rect().position.x < 420.0 and not e.is_boss:
+            e.active = false
+    for b: Box in boxes:
+        if b.x < 300.0:
+            b.active = false
+    _clear(enemy_shots)
+
+
+## The 1UP heart rides in on the top cloud row.
+func _spawn_life_pickup() -> void:
+    if life_spawned or scroll_offset < next_life:
+        return
+    var candidates: Array[Cloud] = []
+    for c in clouds:
+        if c.active and c.y == Cfg.CLOUD_ROWS[0] and c.x >= Cfg.SCREEN_W:
+            candidates.append(c)
+    if candidates.is_empty():
+        return
+    var c: Cloud = candidates[randi() % candidates.size()]
+    var lp := LifePickup.new()
+    lp.place_on(c.x + int(c.w / 2.0) - 17.0, c.y - 40.0)
+    layers["rainbow"].add_child(lp)
+    life_pickups.append(lp)
+    life_spawned = true
+
+
+## +1 life, or coins when already at the maximum.
+func _gain_life() -> void:
+    if not loadout.add_life():
+        loadout.add_coins(10)
 
 
 func _hud_state() -> Dictionary:
     var weapon_def: Dictionary = Weapons.DEFS[weapon]
+    var dead := phase == "run" and squirrel.game_over and loadout.lives <= 0  # out of lives
+    var show_menu := paused or phase == "shop" or (dead and over_elapsed >= MENU_DELAY)
+    var banner_text := ""
+    var banner_color := Color.RED
+    if phase == "run_complete":
+        var title := Lang.t("BOSS DEFEATED!") if complete_boss else Lang.t("RUN %d COMPLETE", [run])
+        banner_text = "%s\n%s" % [title, Lang.t("+%d coins", [complete_bonus])]
+        if complete_life:
+            banner_text += "\n" + Lang.t("+1 life")
+        banner_color = Color(1.0, 0.85, 0.2)
+    elif dead:
+        banner_text = Lang.t("GAME OVER")
+    elif announce_timer > 0.0:
+        banner_text = announce_text
+    var boss_alive := boss != null and not boss.defeated and boss.active
     return {
-        "score": score, "acorns": acorns, "coins": profile.coins,
-        "best": profile.best_score,
+        "score": score, "acorns": acorns, "coins": loadout.coins, "best": profile.best_score,
         "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"],
-        "game_over": squirrel.game_over,
-        "show_menu": squirrel.game_over and over_elapsed >= MENU_DELAY,
+        "run": run, "in_run": phase == "run",
+        "fists": loadout.fists, "lives": loadout.lives,
+        "matrix": clampf((1.0 - Cfg.time_scale) / (1.0 - FIST_SLOW), 0.0, 1.0),
+        "time_left": maxf(0.0, RUN_SECONDS - run_time), "progress": run_time / RUN_SECONDS,
+        "is_boss_run": is_boss_run(run),
+        "boss_hp": boss.hp if boss_alive else 0, "boss_max": boss.max_hp if boss != null else 0,
+        "banner_text": banner_text, "banner_color": banner_color,
+        "show_menu": show_menu, "fade": fade,
         "menu_state": menu_state, "selection": menu_selection,
-        "shop_rows": Shop.rows(profile), "shop_selection": shop_selection,
+        "menu_items": menu_items().map(func(i: Dictionary) -> String: return i["text"]),
+        "shop_rows": _shop_rows() if phase == "shop" else [], "shop_selection": shop_selection,
         "shop_message": shop_message,
     }
 
@@ -371,7 +903,7 @@ func _reachable_y(thing_h: float) -> int:
 func _spawn_boxes() -> void:
     if scroll_offset < next_box:
         return
-    var min_gap := 4.0 * 40.0 / Cfg.SCROLL_SPEED  # keep clear of the last tree
+    var min_gap := 4.0 * 40.0 / scroll_speed  # keep clear of the last tree
     if scroll_offset - last_tree_spawn < min_gap:
         next_box = last_tree_spawn + min_gap
         return
@@ -386,7 +918,7 @@ func _spawn_boxes() -> void:
 func _spawn_trees() -> void:
     if scroll_offset < next_tree:
         return
-    var min_gap := 2.0 * 60.0 / Cfg.SCROLL_SPEED  # keep clear of the last box
+    var min_gap := 2.0 * 60.0 / scroll_speed  # keep clear of the last box
     if scroll_offset - last_box_spawn < min_gap:
         next_tree = last_box_spawn + min_gap
         return
@@ -398,32 +930,66 @@ func _spawn_trees() -> void:
     next_tree = scroll_offset + randi_range(TREE_SPAWN_DISTANCE, TREE_SPAWN_DISTANCE + 800)
 
 
-func _spawn_enemy(kind: String, py: float = -1.0) -> void:
+func _spawn_enemy(kind: String, py: float = -1.0) -> Enemy:
     var e := Enemy.create(kind, Cfg.SPAWN_X, 0.0)
     e.y = py if py >= 0.0 else Cfg.SOIL_Y - e.h  # default: standing on the soil
+    e.anchor()
+    e.scale_for_run(run)
     e.sync()
     layers["air" if e.air else "ground"].add_child(e)
     enemies.append(e)
+    return e
+
+
+## Random spawn gap, shrinking as the runs get harder.
+func _gap(base: int, extra: int) -> float:
+    return randi_range(base, base + extra) * gap_factor
 
 
 func _spawn_ground_enemies() -> void:
-    if score < BEAVER_SCORE:
-        if scroll_offset >= next_skunk:
-            _spawn_enemy("skunk")
-            next_skunk = scroll_offset + randi_range(SKUNK_SPAWN_DISTANCE, SKUNK_SPAWN_DISTANCE + 1000)
-    elif scroll_offset >= next_beaver:
+    if boss_spawned:
+        return  # the boss fights alone
+    if scroll_offset >= next_skunk:
+        _spawn_enemy("skunk")
+        next_skunk = scroll_offset + _gap(SKUNK_SPAWN_DISTANCE, 1000)
+    if run >= BEAVER_FROM_RUN and scroll_offset >= next_beaver:
         _spawn_enemy("beaver")
-        next_beaver = scroll_offset + randi_range(BEAVER_SPAWN_DISTANCE, BEAVER_SPAWN_DISTANCE + 1000)
-    if score >= MOLE_SCORE and scroll_offset >= next_mole:
+        next_beaver = scroll_offset + _gap(BEAVER_SPAWN_DISTANCE, 1000)
+    if run >= CROCO_FROM_RUN and scroll_offset >= next_croco:
+        _spawn_enemy("croco")
+        next_croco = scroll_offset + _gap(CROCO_SPAWN_DISTANCE, 1000)
+    if run >= HEDGEHOG_FROM_RUN and scroll_offset >= next_hedgehog:
+        _spawn_enemy("hedgehog")
+        next_hedgehog = scroll_offset + _gap(HEDGEHOG_SPAWN_DISTANCE, 1000)
+    if run >= FOX_FROM_RUN and scroll_offset >= next_fox:
+        _spawn_enemy("fox")
+        next_fox = scroll_offset + _gap(FOX_SPAWN_DISTANCE, 1200)
+    if run >= MOLE_FROM_RUN and scroll_offset >= next_mole:
         _spawn_enemy("mole")
-        next_mole = scroll_offset + randi_range(MOLE_SPAWN_DISTANCE, MOLE_SPAWN_DISTANCE + 1000)
+        next_mole = scroll_offset + _gap(MOLE_SPAWN_DISTANCE, 1000)
 
 
 func _spawn_birds() -> void:
-    if scroll_offset < next_bird:
+    if boss_spawned or scroll_offset < next_bird:
         return
     _spawn_enemy("bird", _reachable_y(40.0))
-    next_bird = scroll_offset + randi_range(BIRD_SPAWN_DISTANCE, BIRD_SPAWN_DISTANCE + 600)
+    next_bird = scroll_offset + _gap(BIRD_SPAWN_DISTANCE, 600)
+
+
+## Later runs add airborne newcomers: bee swarms (run 2+) and owls (run 7+).
+func _spawn_flyers() -> void:
+    if boss_spawned:
+        return
+    if run >= BEE_FROM_RUN and scroll_offset >= next_bee:
+        next_bee = scroll_offset + _gap(BEE_SPAWN_DISTANCE, 800)
+        var y := float(_reachable_y(32.0))
+        for i in 3:  # a staggered swarm, each bee zigzagging out of phase
+            var bee := _spawn_enemy("bee", y)
+            bee.x += i * 55.0
+            bee.life = i * 0.9
+    if run >= OWL_FROM_RUN and scroll_offset >= next_owl:
+        next_owl = scroll_offset + _gap(OWL_SPAWN_DISTANCE, 1200)
+        _spawn_enemy("owl", 270.0)
 
 
 ## 1-in-30 chance per tick, one at a time, riding in on an off-screen cloud of the lower cloud row.
@@ -448,9 +1014,9 @@ func _spawn_rainbow() -> void:
 
 ## Pterodactyls only hunt a squirrel that is standing on a cloud.
 func _spawn_ptero(on_cloud: bool) -> void:
-    if not on_cloud or scroll_offset < next_ptero:
+    if boss_spawned or not on_cloud or scroll_offset < next_ptero:
         return
-    next_ptero = scroll_offset + randi_range(PTERO_SPAWN_DISTANCE, PTERO_SPAWN_DISTANCE + 600)
+    next_ptero = scroll_offset + _gap(PTERO_SPAWN_DISTANCE, 600)
     _spawn_enemy("ptero", 100.0)
 
 
@@ -461,6 +1027,8 @@ func _update_shots() -> void:
         sh.update(squirrel, enemies)
         if sh.active and not sh.exploding:
             _shot_hits_enemies(sh)
+        if sh.active and not sh.exploding:
+            _shot_hits_enemy_shots(sh)
         if sh.exploding and not sh.exploded:
             sh.exploded = true
             _blast(sh)
@@ -473,6 +1041,16 @@ func _shot_hits_enemies(sh: Shot) -> void:
     for e: Enemy in enemies:
         if not e.hittable() or not e.rect().intersects(sr):
             continue
+        if e.blocks(sh) and sh.kind != "pinecone":  # the shield stops it (bombs still blast)
+            e.shield_flash = 0.15
+            if sh.kind == "boomerang":  # bounces off and flies back
+                sh.returning = true
+                sh.vx = -absf(sh.vx)
+                sh.hit_ids.clear()
+                sh.hit_ids[e.get_instance_id()] = true
+            else:
+                sh.active = false
+            return
         if sh.pierce:
             var id := e.get_instance_id()
             if sh.hit_ids.has(id):
@@ -488,6 +1066,32 @@ func _shot_hits_enemies(sh: Shot) -> void:
             return
 
 
+## Acorns (and every other weapon) shoot down enemy projectiles.
+func _shot_hits_enemy_shots(sh: Shot) -> void:
+    var sr := sh.rect()
+    for es: EnemyShot in enemy_shots:
+        if es.active and es.rect().intersects(sr):
+            es.active = false
+            if not sh.pierce:
+                sh.active = false
+                return
+
+
+func _fire_enemy_shot(e: Enemy, kind: String) -> void:
+    var r := e.rect()
+    var es: EnemyShot
+    match kind:
+        "gas":
+            es = EnemyShot.create("gas", r.position.x - 6.0, Cfg.SOIL_Y - 22.0)
+        "egg":
+            es = EnemyShot.create("egg", r.get_center().x, r.end.y)
+        _:  # "fire": aimed at the squirrel
+            var from := Vector2(r.position.x, r.get_center().y)
+            es = EnemyShot.create("fire", from.x, from.y, (squirrel.rect().get_center() - from).normalized())
+    layers["shots"].add_child(es)
+    enemy_shots.append(es)
+
+
 func _blast(sh: Shot) -> void:
     var c := sh.blast_center()
     for e: Enemy in enemies:
@@ -498,8 +1102,8 @@ func _blast(sh: Shot) -> void:
 ## Apply a hit; a defeated enemy pays score and coins.
 func _damage_enemy(e: Enemy, dmg: int) -> void:
     if e.hit(dmg):
-        score += 1
-        profile.add_coins(e.cfg["coins"])
+        score += 10 if e.is_boss else 1
+        loadout.add_coins(e.cfg["coins"])
 
 
 ## An enemy/tree is only lethal when it reaches the squirrel's front (left side
@@ -511,12 +1115,16 @@ func _crossed(prev_left: float, left: float) -> bool:
 
 func _check_hazards() -> void:
     var sr := squirrel.rect()
-    for t in trees:
-        if t.active and t.rect().intersects(sr) and _crossed(t.prev_x, t.x):
-            squirrel.game_over = true
-    for e in enemies:
-        if e.hittable() and e.rect().intersects(sr) and _crossed(e.prev_x, e.x):
-            squirrel.game_over = true
+    if not _fist_ghosted() and invuln_timer <= 0.0:  # a dashing ghost / a blinking respawn can't be hurt
+        for t in trees:
+            if t.active and t.rect().intersects(sr) and _crossed(t.prev_x + t.hit_dx(), t.x + t.hit_dx()):
+                squirrel.game_over = true
+        for e in enemies:
+            if e.hittable() and e.rect().intersects(sr) and _crossed(e.prev_x + e.hit_dx(), e.x + e.hit_dx()):
+                squirrel.game_over = true
+        for es in enemy_shots:  # projectiles hurt on any contact
+            if es.active and es.rect().intersects(sr):
+                squirrel.game_over = true
     _begin_game_over_if_needed()
 
     for r in rainbows:
@@ -524,15 +1132,24 @@ func _check_hazards() -> void:
             r.collect()
             acorns += 5
             score += 2
-            profile.add_coins(3)
+            loadout.add_coins(RAINBOW_COINS)
             break
+
+    for lp in life_pickups:
+        if lp.active and lp.rect().intersects(sr):
+            lp.active = false
+            _gain_life()
+            var fx := PunchFx.new()
+            fx.position = lp.rect().get_center()
+            layers["shots"].add_child(fx)
+            punch_fx.append(fx)
 
 
 func _update_boxes(live: bool) -> void:
     var sr := squirrel.rect()
     for b: Box in boxes.duplicate():
         if live:
-            b.update(Cfg.SCROLL_SPEED)
+            b.update(scroll_speed * Cfg.time_scale)
         if not b.active:
             _drop(boxes, b)
         elif not b.collected:
@@ -541,7 +1158,7 @@ func _update_boxes(live: bool) -> void:
                 b.mark_collected()
                 var gained := randi_range(1, 3)
                 acorns += gained
-                profile.add_coins(1)
+                loadout.add_coins(BOX_COINS)
                 for i in gained:
                     var p := PopupAcorn.new()
                     p.start(b.x, b.y, b.w, (i - (gained - 1) / 2.0) * 25.0)

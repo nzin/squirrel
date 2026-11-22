@@ -7,6 +7,7 @@ extends Entity
 func _init() -> void:
     w = 60.0
     h = 75.0
+    hitbox = Rect2(0.01, 0.07, 0.88, 0.93)  # measured from tree1/tree2.png
 
 
 func _ready() -> void:

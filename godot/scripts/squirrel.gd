@@ -69,10 +69,11 @@ func update(boxes: Array, clouds: Array) -> void:
     var on_platform := false
     if velocity_y >= 0.0:
         on_platform = stands_on(clouds) or stands_on(boxes)
+    var ts := Cfg.time_scale
     if not on_platform:
-        velocity_y += Cfg.GRAVITY
+        velocity_y += Cfg.GRAVITY * ts
 
-    var new_y := y + velocity_y
+    var new_y := y + velocity_y * ts
 
     # --- boxes (solid) ---
     var sq := Rect2(x, new_y, w, h)

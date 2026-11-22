@@ -24,6 +24,7 @@ var vy := 0.0
 var gravity := 0.0
 var damage := 1
 var pierce := false  # survives hits instead of being consumed
+var breaks_shield := false  # ignores the frontal shield of an enemy
 var hit_ids := {}    # enemies already hit by this (piercing) shot / leg
 var origin_x := 0.0
 var returning := false
@@ -31,7 +32,7 @@ var spin := 0.0
 
 var exploding := false
 var exploded := false
-var blast_age := 0
+var blast_age := 0.0
 var blast_radius := 0.0
 
 
@@ -75,6 +76,7 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             vx = 14.0
             damage = 2
             pierce = true
+            breaks_shield = true
         "homing":
             w = 15.0
             h = 20.0
@@ -97,8 +99,9 @@ func blast_center() -> Vector2:
 
 ## One physics tick. `enemies` is only read by the homing shot.
 func update(sq: Squirrel, enemies: Array) -> void:
+    var ts := Cfg.time_scale
     if exploding:
-        blast_age += 1
+        blast_age += ts
         if blast_age > BLAST_TICKS:
             active = false
         queue_redraw()
@@ -110,14 +113,14 @@ func update(sq: Squirrel, enemies: Array) -> void:
                 returning = true
                 vx = -vx
                 hit_ids.clear()  # may hit everything again on the way back
-            spin += 0.45
+            spin += 0.45 * ts
             queue_redraw()
         "homing":
             _steer(enemies)
 
-    vy += gravity
-    x += vx
-    y += vy
+    vy += gravity * ts
+    x += vx * ts
+    y += vy * ts
 
     if gravity > 0.0 and y + h >= Cfg.SOIL_Y:
         y = Cfg.SOIL_Y - h
@@ -147,7 +150,7 @@ func _steer(enemies: Array) -> void:
     var want := Vector2(HOMING_SPEED, 0.0)
     if best != null:
         want = (best.rect().get_center() - me).normalized() * HOMING_SPEED
-    var v := Vector2(vx, vy).lerp(want, 0.2)
+    var v := Vector2(vx, vy).lerp(want, 0.2 * Cfg.time_scale)
     vx = v.x
     vy = v.y
 

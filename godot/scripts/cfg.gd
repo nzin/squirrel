@@ -20,6 +20,10 @@ const CLOUD_SPACING := 70.0
 
 const ASSET_DIR := "res://assets/"
 
+## Slow-motion factor (1 = normal). Game sets it every tick; every moving
+## thing multiplies its per-tick movement by it so slow-mo stays smooth.
+static var time_scale := 1.0
+
 
 static func tex(file: String) -> Texture2D:
     # load() caches resources, so repeated spawns never hit the disk again
