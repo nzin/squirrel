@@ -19,14 +19,16 @@ const INVULN_TIME := 2.5     # blinking invulnerability after a respawn
 const FADE_TIME := 0.45
 const ANNOUNCE_TIME := 2.0
 
-# Matrix Fist timeline (real seconds): 0-1 slow down, 1-2 hold, 2-3 dash out
-# across the whole screen, 3-4 dash back, 4-5 speed back up. Everything on the
-# way gets punched (once per leg). The dash happens in slow motion.
-const FIST_DURATION := 5.0
+# Matrix Fist timeline (real seconds): the attack starts at second 0 - the squirrel
+# dashes out across the whole screen (0-1.5 s) and back (1.5-3 s), punching
+# everything on the way (once per leg). Meanwhile the world slows down (0-1 s),
+# stays slow, and speeds back up (3-4 s). The whole thing lasts 4 seconds.
+const FIST_DURATION := 4.0
 const FIST_SLOW := 0.1       # world speed at the bottom of the slow-down
-const FIST_DASH_AT := 2.0
-const FIST_PUNCH_AT := 3.0
-const FIST_BACK_AT := 4.0
+const FIST_DASH_AT := 0.0    # the attack starts immediately
+const FIST_TURN_AT := 1.5    # far end reached, dash back
+const FIST_BACK_AT := 3.0    # back in place; the world speeds up again until 4 s
+const FIST_LEG := FIST_TURN_AT - FIST_DASH_AT
 const FIST_REACH := 50.0     # how far in front of the squirrel the fist reaches
 const FIST_PAD := 10.0       # extra height above/below the squirrel that still gets hit
 const FIST_END_X := Cfg.SCREEN_W - 50.0  # the far end of the dash (screen's right side)
@@ -506,7 +508,7 @@ func _menu_input(event: InputEvent) -> void:
 
 # ---------------------------------------------------------------- Matrix Fist
 
-## World speed during the sequence: eases down in 0-1 s, holds, eases back in 4-5 s.
+## World speed during the sequence: eases down in 0-1 s, holds, eases back in 3-4 s.
 static func fist_time_scale(t: float) -> float:
     if t < 1.0:
         return lerpf(1.0, FIST_SLOW, smoothstep(0.0, 1.0, t))
@@ -545,20 +547,20 @@ func _update_fist_clock(delta: float) -> void:
     if not fist_active:
         Cfg.time_scale = 1.0
         return
-    fist_t += delta  # real time: the sequence always lasts 5 s whatever the slow-mo
+    fist_t += delta  # real time: the sequence always lasts 4 s whatever the slow-mo
     if fist_t >= FIST_DURATION:
         _end_fist()
         return
     Cfg.time_scale = fist_time_scale(fist_t)
 
 
-## True during the dash out and back (2-4 s): invulnerable and intangible.
+## True during the dash out and back (0-3 s): invulnerable and intangible.
 func _fist_ghosted() -> bool:
     return fist_active and fist_t >= FIST_DASH_AT and fist_t < FIST_BACK_AT
 
 
-## Move the squirrel along the dash: out across the screen (2-3 s) and back
-## (3-4 s), punching everything on the way. It flies level with the nearest
+## Move the squirrel along the dash: out across the screen (0-1.5 s) and back
+## (1.5-3 s), punching everything on the way. It flies level with the nearest
 ## target (never above it) and returns to where it was.
 func _apply_fist_motion() -> void:
     if not fist_active or squirrel.game_over or fist_t < FIST_DASH_AT:
@@ -568,21 +570,21 @@ func _apply_fist_motion() -> void:
         fist_y0 = squirrel.y
         _choose_dash_height()
     var prev_x := squirrel.x
-    if fist_t < FIST_PUNCH_AT:
-        var u := 1.0 - pow(1.0 - (fist_t - FIST_DASH_AT), 3.0)  # fast start, ease out
+    if fist_t < FIST_TURN_AT:
+        var u := 1.0 - pow(1.0 - (fist_t - FIST_DASH_AT) / FIST_LEG, 3.0)  # fast start, ease out
         squirrel.x = lerpf(fist_x0, fist_x1, u)
         # reach the target height in the first quarter, so the whole run is level
-        squirrel.y = lerpf(fist_y0, fist_y1, smoothstep(0.0, 1.0, (fist_t - FIST_DASH_AT) / 0.25))
+        squirrel.y = lerpf(fist_y0, fist_y1, smoothstep(0.0, 1.0, (fist_t - FIST_DASH_AT) / (FIST_LEG * 0.25)))
         _spawn_ghost()
     elif fist_t < FIST_BACK_AT:
         if not fist_turned:  # turnaround: everything may be hit again on the way back
             fist_turned = true
             fist_hit.clear()
             _spawn_fx(Vector2(squirrel.x + squirrel.w, squirrel.y + squirrel.h / 2.0))
-        var u2 := smoothstep(0.0, 1.0, fist_t - FIST_PUNCH_AT)
+        var u2 := smoothstep(0.0, 1.0, (fist_t - FIST_TURN_AT) / FIST_LEG)
         squirrel.x = lerpf(fist_x1, fist_x0, u2)
         # ...and only come back down/up in the last quarter of the return leg
-        squirrel.y = lerpf(fist_y1, fist_y0, smoothstep(0.0, 1.0, (fist_t - FIST_PUNCH_AT - 0.75) / 0.25))
+        squirrel.y = lerpf(fist_y1, fist_y0, smoothstep(0.0, 1.0, ((fist_t - FIST_TURN_AT) / FIST_LEG - 0.75) / 0.25))
         _spawn_ghost()
     else:
         squirrel.x = fist_x0

@@ -659,8 +659,8 @@ func _initialize() -> void:
 
     print("Matrix Fist")
     check(is_equal_approx(Game.fist_time_scale(0.0), 1.0) and is_equal_approx(Game.fist_time_scale(1.0), Game.FIST_SLOW)
-        and is_equal_approx(Game.fist_time_scale(3.0), Game.FIST_SLOW) and is_equal_approx(Game.fist_time_scale(5.0), 1.0)
-        and Game.fist_time_scale(0.5) < 1.0 and Game.fist_time_scale(0.5) > Game.FIST_SLOW and Game.fist_time_scale(4.5) < 1.0, "time curve: slow down 0-1 s, hold, back to normal 4-5 s")
+        and is_equal_approx(Game.fist_time_scale(3.0), Game.FIST_SLOW) and is_equal_approx(Game.fist_time_scale(4.0), 1.0)
+        and Game.fist_time_scale(0.5) < 1.0 and Game.fist_time_scale(0.5) > Game.FIST_SLOW and Game.fist_time_scale(3.5) < 1.0 and Game.fist_time_scale(3.5) > Game.FIST_SLOW and is_equal_approx(Game.fist_time_scale(4.0), 1.0), "time curve: slow down 0-1 s, hold, back to normal 3-4 s")
     game.new_game()
     _quiet(game)
     check(not game.use_fist(), "no charge: nothing happens")
@@ -699,8 +699,8 @@ func _initialize() -> void:
     check(absf(min_ts - Game.FIST_SLOW) < 0.01, "the world slows to %.0f%% speed" % (min_ts * 100.0))
     check(max_x > 650.0, "the squirrel dashes across the whole screen (to x=%.0f)" % max_x)
     check(ghosts_seen >= 3, "with a ghost trail (%d afterimages)" % ghosts_seen)
-    check(victim.defeated and defeated_at >= 2.0 and defeated_at < 3.0, "the dash punches it for 3 damage on the way out, through the shield (t=%.2f)" % defeated_at)
-    check(absf(game.squirrel.x - Squirrel.START_X) < 0.5 and not game.fist_active and Cfg.time_scale == 1.0, "back in place at normal speed after 5 s")
+    check(victim.defeated and defeated_at >= 0.0 and defeated_at < Game.FIST_TURN_AT, "the dash starts at second 0 and punches it for 3 damage on the way out, through the shield (t=%.2f)" % defeated_at)
+    check(absf(game.squirrel.x - Squirrel.START_X) < 0.5 and not game.fist_active and Cfg.time_scale == 1.0, "back in place at normal speed after 4 s")
     check(tint_seen > 0.1 and game.hud.matrix_tint.color.a < 0.01, "matrix tint fades in and out")
     check(invuln_ok, "no damage taken during the sequence")
     check(min_sq_y >= game.squirrel.ground_y - 0.5, "the squirrel never rises above a ground target (min y %.1f)" % min_sq_y)
@@ -728,7 +728,7 @@ func _initialize() -> void:
     var all_out := false
     for i in 330:
         game.frame(dt)
-        if hp_at_turn < 0 and game.fist_t >= Game.FIST_PUNCH_AT:
+        if hp_at_turn < 0 and game.fist_t >= Game.FIST_TURN_AT:
             hp_at_turn = tough.hp
             all_out = first.defeated and not wood.active
     check(all_out, "the dash goes past the first enemy: skunk beaten and tree smashed on the way out")

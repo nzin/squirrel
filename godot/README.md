@@ -32,7 +32,7 @@ A *game* is a series of **runs**:
 
 ### Matrix Fist (key F)
 
-Bought in the shop as a **pack of 3 charges** (45 coins; a fist + the count appears in the HUD). Pressing **F** starts a 5-second sequence: 0-1 s the world slows to 10 % and the light dims, 1-2 s hold, 2-3 s the squirrel dashes **across the whole screen** (ghost trail, invulnerable), 3-4 s it dashes back, 4-5 s the world speeds up and the light returns.
+Bought in the shop as a **pack of 3 charges** (45 coins; a fist + the count appears in the HUD). Pressing **F** starts a 4-second sequence and **the attack starts at second 0**: the squirrel dashes **across the whole screen** (0-1.5 s, ghost trail, invulnerable) and back (1.5-3 s). Meanwhile the world slows to 10 % and the light dims (0-1 s), stays slow, and speeds up with the light returning (3-4 s).
 
 It does not stop at the first thing it meets: **every enemy and tree on the way is hit, once on the way out and once on the way back** - 3 damage per hit (shields don't help), trees are smashed, enemy projectiles destroyed. It flies level with the nearest target ahead (ground, or a flyer's height), never above it. Implemented with `Cfg.time_scale`, which every moving thing multiplies its per-tick movement by, so the slow-motion is smooth.
 
