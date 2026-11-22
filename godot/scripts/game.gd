@@ -57,6 +57,10 @@ var rainbows: Array[RainbowAcorn] = []
 func _ready() -> void:
     randomize()
     _setup_input()
+    # Exported macOS app runs full screen; editor / `make run` stay windowed
+    # and the web build is sized by the browser page.
+    if OS.get_name() == "macOS" and OS.has_feature("template"):
+        DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
     background = Background.new()
     add_child(background)

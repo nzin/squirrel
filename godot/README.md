@@ -12,6 +12,14 @@ Open this folder in the Godot 4 editor and press F5, or:
 
 Controls: **Space** jump, **Shift** throw acorn. Game-over menu: Up/Down, Enter/Space, Esc.
 
+## Build (from the repo root, see `Makefile`)
+
+```bash
+make templates   # one-time: download Godot export templates (~1.3 GB)
+make web         # -> godot/build/web/   (then: make serve)
+make macos       # -> godot/build/macos/Squirrel.app (universal, runs full screen; make run-macos)
+```
+
 ## Test (headless)
 
 ```bash
