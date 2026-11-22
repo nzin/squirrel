@@ -5,39 +5,45 @@ extends Entity
 ##
 ## Behaviour shared by all kinds:
 ##  - scrolls with the world, plus an optional extra `forward` speed
-##  - hit by an acorn: loses 1 hp; at 0 hp it is `defeated` and plays the
+##  - hit by a shot: loses `damage` hp (and pays out `coins` when defeated); at 0 hp it is `defeated` and plays the
 ##    "hop then fall off screen" animation
 ##  - lethal to the squirrel only on a left-side hit (see Game._crossed)
 ## Mole is special: it cycles between underground (harmless) and surfaced.
 
 const KINDS := {
     "skunk": {
+        "coins": 1,
         "w": 80.0, "h": 80.0, "air": false, "hp": 1,
         "frames": ["skunk_1.png", "skunk_2.png", "skunk_3.png"],
         "interval": 1.5, "random_frames": true, "forward": 0.0, "fall_vx": -2.5,
     },
     "beaver": {
+        "coins": 2,
         "w": 90.0, "h": 40.0, "air": false, "hp": 2,
         "frames": ["beaver1.png", "beaver2.png", "beaver3.png"],
         "interval": 0.25, "random_frames": false, "forward": -2.0, "fall_vx": -2.5,
     },
     # Implemented in the pygame version but never spawned there either.
     "croco": {
+        "coins": 2,
         "w": 80.0, "h": 80.0, "air": false, "hp": 2,
         "frames": ["croco1.png", "croco2.png", "croco3.png"],
         "interval": 0.75, "random_frames": true, "forward": -2.0, "fall_vx": -2.5,
     },
     "mole": {
+        "coins": 2,
         "w": 60.0, "h": 60.0, "air": false, "hp": 1,
         "frames": ["mole1.png", "mole2.png"],  # 0 = underground, 1 = surfaced
         "interval": 0.0, "random_frames": false, "forward": 0.0, "fall_vx": -2.5,
     },
     "bird": {
+        "coins": 1,
         "w": 60.0, "h": 60.0, "air": true, "hp": 1,
         "frames": ["bird_1.png", "bird_2.png"],
         "interval": 0.5, "random_frames": false, "forward": -0.5, "fall_vx": -2.5,
     },
     "ptero": {
+        "coins": 3,
         "w": 90.0, "h": 60.0, "air": true, "hp": 2,
         "frames": ["ptero1.png", "ptero2.png"],
         "interval": 1.0, "random_frames": false, "forward": -1.0, "fall_vx": -3.0,
@@ -97,9 +103,9 @@ func hittable() -> bool:
     return not (kind == "mole" and underground)
 
 
-func hit() -> bool:
-    ## Apply one acorn hit. Returns true if this hit defeated it.
-    hp -= 1
+func hit(damage := 1) -> bool:
+    ## Apply a hit. Returns true if this hit defeated it.
+    hp -= damage
     if hp <= 0:
         defeated = true
         return true

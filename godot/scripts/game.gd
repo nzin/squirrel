@@ -19,8 +19,12 @@ const MOLE_SCORE := 15
 
 const LAYERS := ["trees", "ground", "air", "clouds", "rainbow", "boxes", "popups", "player", "shots"]
 
+# --- persistent progress (coins, owned weapons, upgrades) ---
+var profile := Profile.new()
+
 # --- run state ---
-var acorns := 3
+var acorns := Weapons.START_AMMO
+var weapon := "acorn"  # equipped weapon id (see Weapons)
 var score := 0
 var scroll_offset := 0.0
 
@@ -36,8 +40,10 @@ var last_tree_spawn := -INF
 
 var over_started := false
 var over_elapsed := 0.0
-var menu_state := "main"  # "main" | "controls"
+var menu_state := "main"  # "main" | "controls" | "shop"
 var menu_selection := 0
+var shop_selection := 0
+var shop_message := ""
 
 # --- world ---
 var squirrel: Squirrel
@@ -45,7 +51,7 @@ var background: Background
 var hud: Hud
 var layers := {}
 
-var shots: Array[Acorn] = []
+var shots: Array[Shot] = []
 var boxes: Array[Box] = []
 var trees: Array[TreeProp] = []
 var enemies: Array[Enemy] = []
@@ -56,6 +62,7 @@ var rainbows: Array[RainbowAcorn] = []
 
 func _ready() -> void:
     randomize()
+    profile.load_from_disk()
     _setup_input()
     # Exported macOS app runs full screen; editor / `make run` stay windowed
     # and the web build is sized by the browser page.
@@ -82,6 +89,7 @@ func _ready() -> void:
 func _setup_input() -> void:
     _add_key_action("jump", KEY_SPACE)
     _add_key_action("throw", KEY_SHIFT)
+    _add_key_action("weapon", KEY_Q)
 
 
 func _add_key_action(action: String, keycode: Key) -> void:
@@ -96,7 +104,8 @@ func _add_key_action(action: String, keycode: Key) -> void:
 
 func reset_game() -> void:
     scroll_offset = 0.0
-    acorns = 3
+    acorns = profile.start_ammo()
+    weapon = profile.equipped
     score = 0
     next_box = 200.0
     next_tree = 500.0
@@ -111,6 +120,7 @@ func reset_game() -> void:
     over_elapsed = 0.0
     menu_state = "main"
     menu_selection = 0
+    shop_message = ""
 
     _clear(shots)
     _clear(boxes)
@@ -143,11 +153,15 @@ func _drop(list: Array, item: Node) -> void:
 
 # ---------------------------------------------------------------- input
 
-## One-way platforms the squirrel can stand on: clouds and tree tops.
+## One-way platforms the squirrel can stand on: clouds, tree tops and live
+## opponents (a defeated enemy or a mole underground is not solid).
 func _platforms() -> Array:
     var p: Array = []
     p.append_array(clouds)
     p.append_array(trees)
+    for e in enemies:
+        if e.hittable():
+            p.append(e)
     return p
 
 
@@ -156,13 +170,38 @@ func do_jump() -> void:
 
 
 func do_throw() -> void:
-    if acorns <= 0:
-        return
-    var a := Acorn.new()
-    a.place(squirrel.x + squirrel.w, squirrel.y + int(squirrel.h / 2.0))
-    layers["shots"].add_child(a)
-    shots.append(a)
-    acorns -= 1
+    var id := weapon
+    var cost: int = Weapons.DEFS[id]["ammo"]
+    if acorns < cost:
+        # not enough ammo for the fancy weapon: fall back to a plain acorn
+        id = "acorn"
+        cost = 1
+        if acorns < cost:
+            return
+    acorns -= cost
+    var sx := squirrel.x + squirrel.w
+    var sy := squirrel.y + int(squirrel.h / 2.0)
+    match id:
+        "spread":
+            for dy: float in [-2.5, 0.0, 2.5]:
+                _add_shot(Shot.create("acorn", sx, sy, dy))
+        _:
+            _add_shot(Shot.create(id, sx, sy))
+
+
+func _add_shot(s: Shot) -> void:
+    layers["shots"].add_child(s)
+    shots.append(s)
+
+
+## Switch to the next owned weapon (Q).
+func cycle_weapon() -> void:
+    var owned: Array[String] = []
+    for id in Weapons.ORDER:
+        if profile.owns(id):
+            owned.append(id)
+    weapon = owned[(owned.find(weapon) + 1) % owned.size()]
+    profile.equip(weapon)
 
 
 func _input(event: InputEvent) -> void:
@@ -176,25 +215,44 @@ func _input(event: InputEvent) -> void:
         do_jump()
     elif event.is_action_pressed("throw"):
         do_throw()
+    elif event.is_action_pressed("weapon"):
+        cycle_weapon()
 
 
 func _menu_input(event: InputEvent) -> void:
-    if menu_state == "main":
-        var items := Hud.menu_items()
-        if event.is_action_pressed("ui_up"):
-            menu_selection = (menu_selection + items.size() - 1) % items.size()
-        elif event.is_action_pressed("ui_down"):
-            menu_selection = (menu_selection + 1) % items.size()
-        elif event.is_action_pressed("ui_accept"):
-            match items[menu_selection]:
-                "Restart":
-                    reset_game()
-                "Show Controls":
-                    menu_state = "controls"
-                "Quit":
-                    get_tree().quit()
-    elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
-        menu_state = "main"
+    match menu_state:
+        "main":
+            var items := Hud.menu_items()
+            if event.is_action_pressed("ui_up"):
+                menu_selection = (menu_selection + items.size() - 1) % items.size()
+            elif event.is_action_pressed("ui_down"):
+                menu_selection = (menu_selection + 1) % items.size()
+            elif event.is_action_pressed("ui_accept"):
+                match items[menu_selection]:
+                    "Restart":
+                        reset_game()
+                    "Shop":
+                        menu_state = "shop"
+                        shop_message = ""
+                    "Show Controls":
+                        menu_state = "controls"
+                    "Quit":
+                        get_tree().quit()
+        "shop":
+            var rows := Shop.rows(profile)
+            if event.is_action_pressed("ui_up"):
+                shop_selection = (shop_selection + rows.size() - 1) % rows.size()
+                shop_message = ""
+            elif event.is_action_pressed("ui_down"):
+                shop_selection = (shop_selection + 1) % rows.size()
+                shop_message = ""
+            elif event.is_action_pressed("ui_accept"):
+                shop_message = Shop.activate(profile, rows[shop_selection]["id"])
+            elif event.is_action_pressed("ui_cancel"):
+                menu_state = "main"
+        _:
+            if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
+                menu_state = "main"
 
 
 # ---------------------------------------------------------------- frame
@@ -212,9 +270,7 @@ func frame(delta: float) -> void:
         _spawn_birds()
 
     squirrel.update(boxes, _platforms())
-    if squirrel.game_over and not over_started:
-        over_started = true
-        over_elapsed = 0.0
+    _begin_game_over_if_needed()
 
     var on_cloud := squirrel.velocity_y >= 0.0 and squirrel.stands_on(clouds)
     if not squirrel.game_over:
@@ -258,7 +314,28 @@ func frame(delta: float) -> void:
     background.set_scroll(scroll_offset)
     if squirrel.game_over:
         over_elapsed += delta
-    hud.refresh(score, acorns, squirrel.game_over, squirrel.game_over and over_elapsed >= MENU_DELAY, menu_state, menu_selection)
+    hud.refresh(_hud_state())
+
+
+func _begin_game_over_if_needed() -> void:
+    if squirrel.game_over and not over_started:
+        over_started = true
+        over_elapsed = 0.0
+        profile.record_score(score)
+
+
+func _hud_state() -> Dictionary:
+    var weapon_def: Dictionary = Weapons.DEFS[weapon]
+    return {
+        "score": score, "acorns": acorns, "coins": profile.coins,
+        "best": profile.best_score,
+        "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"],
+        "game_over": squirrel.game_over,
+        "show_menu": squirrel.game_over and over_elapsed >= MENU_DELAY,
+        "menu_state": menu_state, "selection": menu_selection,
+        "shop_rows": Shop.rows(profile), "shop_selection": shop_selection,
+        "shop_message": shop_message,
+    }
 
 
 # ---------------------------------------------------------------- spawning
@@ -380,17 +457,49 @@ func _spawn_ptero(on_cloud: bool) -> void:
 # ---------------------------------------------------------------- collisions
 
 func _update_shots() -> void:
-    for a: Acorn in shots.duplicate():
-        a.update()
-        var ar := a.rect()
-        for e in enemies:
-            if e.hittable() and e.rect().intersects(ar):
-                a.active = false
-                if e.hit():
-                    score += 1
-                break
-        if not a.active:
-            _drop(shots, a)
+    for sh: Shot in shots.duplicate():
+        sh.update(squirrel, enemies)
+        if sh.active and not sh.exploding:
+            _shot_hits_enemies(sh)
+        if sh.exploding and not sh.exploded:
+            sh.exploded = true
+            _blast(sh)
+        if not sh.active:
+            _drop(shots, sh)
+
+
+func _shot_hits_enemies(sh: Shot) -> void:
+    var sr := sh.rect()
+    for e: Enemy in enemies:
+        if not e.hittable() or not e.rect().intersects(sr):
+            continue
+        if sh.pierce:
+            var id := e.get_instance_id()
+            if sh.hit_ids.has(id):
+                continue
+            sh.hit_ids[id] = true
+            _damage_enemy(e, sh.damage)
+        elif sh.kind == "pinecone":
+            sh.detonate()  # damage is dealt by _blast
+            return
+        else:
+            sh.active = false
+            _damage_enemy(e, sh.damage)
+            return
+
+
+func _blast(sh: Shot) -> void:
+    var c := sh.blast_center()
+    for e: Enemy in enemies:
+        if e.hittable() and e.rect().get_center().distance_to(c) <= sh.blast_radius + minf(e.w, e.h) / 2.0:
+            _damage_enemy(e, sh.damage)
+
+
+## Apply a hit; a defeated enemy pays score and coins.
+func _damage_enemy(e: Enemy, dmg: int) -> void:
+    if e.hit(dmg):
+        score += 1
+        profile.add_coins(e.cfg["coins"])
 
 
 ## An enemy/tree is only lethal when it reaches the squirrel's front (left side
@@ -408,15 +517,14 @@ func _check_hazards() -> void:
     for e in enemies:
         if e.hittable() and e.rect().intersects(sr) and _crossed(e.prev_x, e.x):
             squirrel.game_over = true
-    if squirrel.game_over and not over_started:
-        over_started = true
-        over_elapsed = 0.0
+    _begin_game_over_if_needed()
 
     for r in rainbows:
         if r.active and not r.collected and r.rect().intersects(sr):
             r.collect()
             acorns += 5
             score += 2
+            profile.add_coins(3)
             break
 
 
@@ -433,6 +541,7 @@ func _update_boxes(live: bool) -> void:
                 b.mark_collected()
                 var gained := randi_range(1, 3)
                 acorns += gained
+                profile.add_coins(1)
                 for i in gained:
                     var p := PopupAcorn.new()
                     p.start(b.x, b.y, b.w, (i - (gained - 1) / 2.0) * 25.0)

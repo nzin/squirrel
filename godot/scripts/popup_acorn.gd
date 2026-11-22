@@ -48,4 +48,4 @@ func _reposition(progress: float) -> void:
 
 
 func _draw() -> void:
-    Acorn.draw_shape(self, w, h)
+    Shot.draw_acorn(self, w, h)

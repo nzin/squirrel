@@ -2,7 +2,7 @@ class_name Squirrel
 extends Entity
 ## The player. Physics is a direct port of the pygame Squirrel.update():
 ##  - boxes are solid: hit from below = collect, land on top, hit from the side = death
-##  - clouds and tree tops are one-way platforms: pass through going up, land when falling
+##  - clouds, tree tops and enemies are one-way platforms: pass through going up, land when falling
 
 const START_X := 50.0
 
