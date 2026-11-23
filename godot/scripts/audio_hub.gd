@@ -119,12 +119,19 @@ func _load_stream(folder: String, sound: String) -> AudioStream:
     return stream
 
 
+## The stream of an effect. The long jingles (game over, boss defeated) live with
+## the music files, so look there too.
+func sfx_stream(sound: String) -> AudioStream:
+    var stream := _load_stream(SFX_DIR, sound)
+    return stream if stream != null else _load_stream(MUSIC_DIR, sound)
+
+
 ## Play an effect. `variation` randomises the pitch a little (0 = never).
 func sfx(sound: String, variation := 0.06, extra_db := 0.0) -> void:
     played.append(sound)
     if played.size() > 80:
         played.pop_front()
-    var stream := _load_stream(SFX_DIR, sound)
+    var stream := sfx_stream(sound)
     if stream == null:
         return
     var p := _players[_next_player]

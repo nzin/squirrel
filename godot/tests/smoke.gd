@@ -869,6 +869,22 @@ func _initialize() -> void:
         if a._load_stream(AudioHub.MUSIC_DIR, nm) == null:
             missing.append("music/" + nm)
     check(missing.is_empty(), "every effect and music track has a sound file %s" % [missing])
+    # every sound the game asks for must really exist (the log in sfx() would hide a missing file)
+    var used: Array[String] = []
+    var rx := RegEx.new()
+    rx.compile('(?:sfx\\("|pending_sound = "|cue = ")([a-z_]+)"')
+    for src in ["res://scripts/game.gd", "res://scripts/enemy.gd"]:
+        for m in rx.search_all(FileAccess.get_file_as_string(src)):
+            var found := m.get_string(1)
+            if not found.ends_with("_") and not used.has(found):  # "throw_" is a prefix (+ weapon id)
+                used.append(found)
+    for wid in Weapons.ORDER:
+        used.append("throw_" + wid)
+    var silent: Array[String] = []
+    for nm in used:
+        if a.sfx_stream(nm) == null:
+            silent.append(nm)
+    check(used.size() > 30 and silent.is_empty(), "all %d sounds the game plays have a file %s" % [used.size(), silent])
     var kenney: Array[String] = []
     for nm in ["hit", "fist_hit", "shield_clang", "box_bump", "land", "splat", "smash", "stomp", "mole_pop", "shop_bell",
             "coin", "buy", "ui_move", "ui_select", "ui_back", "pause", "no_money"]:
