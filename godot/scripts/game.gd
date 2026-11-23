@@ -53,10 +53,8 @@ const CROCO_FROM_RUN := 4
 const CROCO_SPAWN_DISTANCE := 2300
 const BEE_FROM_RUN := 8          # swarms of 3
 const BEE_SPAWN_DISTANCE := 1700
-const HEDGEHOG_FROM_RUN := 5
-const HEDGEHOG_SPAWN_DISTANCE := 2400
-const FOX_FROM_RUN := 9
-const FOX_SPAWN_DISTANCE := 2600
+const RACCOON_FROM_RUN := 9     # needs its (local-only) art: see Enemy.is_available
+const RACCOON_SPAWN_DISTANCE := 2600
 const OWL_FROM_RUN := 7
 const OWL_SPAWN_DISTANCE := 2800
 
@@ -93,8 +91,7 @@ var next_beaver := 1000.0
 var next_mole := 1200.0
 var next_croco := 1500.0
 var next_bee := 1400.0
-var next_hedgehog := 1800.0
-var next_fox := 2000.0
+var next_raccoon := 2000.0
 var next_owl := 1800.0
 var next_bird := 800.0
 var next_ptero := 1500.0
@@ -225,7 +222,7 @@ func start_run() -> void:
     boss_spawned = false
     announce_text = ""
     announce_timer = 0.0
-    acorns = loadout.start_ammo()
+    acorns = loadout.acorns_for_next_run()  # kept from the previous run (see Loadout)
     weapon = loadout.equipped
     var d := float(run - 1)
     scroll_speed = Cfg.SCROLL_SPEED + 0.25 * minf(d, 8.0)
@@ -237,8 +234,7 @@ func start_run() -> void:
     next_mole = 1200.0
     next_croco = 1500.0
     next_bee = 1400.0
-    next_hedgehog = 1800.0
-    next_fox = 2000.0
+    next_raccoon = 2000.0
     next_owl = 1800.0
     next_bird = 800.0
     next_ptero = 1500.0
@@ -320,6 +316,7 @@ func _spawn_boss() -> void:
 
 func _complete_run(boss_defeated: bool) -> void:
     _end_fist()
+    loadout.carried_acorns = acorns  # the acorns you have now are the ones you start the next run with
     phase = "run_complete"
     complete_timer = 0.0
     complete_boss = boss_defeated
@@ -870,7 +867,7 @@ func frame(delta: float) -> void:
         if live:
             es.update(gd)
         if not es.active:
-            if es.kind == "egg" and es.y + es.h >= Cfg.SOIL_Y:
+            if (es.kind == "egg" or es.kind == "nut") and es.y + es.h >= Cfg.SOIL_Y:
                 audio.sfx("splat")
             _drop(enemy_shots, es)
     for c: Cloud in clouds.duplicate():
@@ -1090,12 +1087,10 @@ func _spawn_ground_enemies() -> void:
     if run >= CROCO_FROM_RUN and scroll_offset >= next_croco:
         _spawn_enemy("croco")
         next_croco = scroll_offset + _gap(CROCO_SPAWN_DISTANCE, 1000)
-    if run >= HEDGEHOG_FROM_RUN and scroll_offset >= next_hedgehog:
-        _spawn_enemy("hedgehog")
-        next_hedgehog = scroll_offset + _gap(HEDGEHOG_SPAWN_DISTANCE, 1000)
-    if run >= FOX_FROM_RUN and scroll_offset >= next_fox:
-        _spawn_enemy("fox")
-        next_fox = scroll_offset + _gap(FOX_SPAWN_DISTANCE, 1200)
+    if run >= RACCOON_FROM_RUN and scroll_offset >= next_raccoon:
+        next_raccoon = scroll_offset + _gap(RACCOON_SPAWN_DISTANCE, 1200)
+        if Enemy.is_available("raccoon"):
+            _spawn_enemy("raccoon")
     if run >= MOLE_FROM_RUN and scroll_offset >= next_mole:
         _spawn_enemy("mole")
         next_mole = scroll_offset + _gap(MOLE_SPAWN_DISTANCE, 1000)
@@ -1112,7 +1107,7 @@ func _spawn_birds() -> void:
 func _spawn_flyers() -> void:
     if boss_spawned:
         return
-    if run >= BEE_FROM_RUN and scroll_offset >= next_bee:
+    if run >= BEE_FROM_RUN and scroll_offset >= next_bee and Enemy.is_available("bee"):
         next_bee = scroll_offset + _gap(BEE_SPAWN_DISTANCE, 800)
         var y := float(_reachable_y(32.0))
         for i in 3:  # a staggered swarm, each bee zigzagging out of phase
@@ -1121,7 +1116,8 @@ func _spawn_flyers() -> void:
             bee.life = i * 0.9
     if run >= OWL_FROM_RUN and scroll_offset >= next_owl:
         next_owl = scroll_offset + _gap(OWL_SPAWN_DISTANCE, 1200)
-        _spawn_enemy("owl", 270.0)
+        if Enemy.is_available("owl"):
+            _spawn_enemy("owl", 270.0)
 
 
 ## 1-in-30 chance per tick, one at a time, riding in on an off-screen cloud of the lower cloud row.
@@ -1224,6 +1220,8 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
             es = EnemyShot.create("gas", r.position.x - 6.0, Cfg.SOIL_Y - 22.0)
         "egg":
             es = EnemyShot.create("egg", r.get_center().x, r.end.y)
+        "nut":  # leaves his front paws (the side he faces) and flies straight and level
+            es = EnemyShot.create("nut", r.position.x - 12.0, r.position.y + r.size.y * 0.45)
         _:  # "fire": aimed at the squirrel
             var from := Vector2(r.position.x, r.get_center().y)
             es = EnemyShot.create("fire", from.x, from.y, (squirrel.rect().get_center() - from).normalized())

@@ -51,7 +51,7 @@ static func rows(p: Loadout, next_run: int, next_is_boss: bool) -> Array[Diction
     out.append({
         "id": AMMO_ROW, "name": Lang.t("Bigger Pouch (+1 start acorn)"),
         "status": Lang.t("MAX") if price < 0 else Lang.t("%d coins", [price]),
-        "detail": Lang.t("Start every run with %d acorns (level %d/%d).", [p.start_ammo(), p.ammo_level, Weapons.AMMO_UPGRADE_PRICES.size()]),
+        "detail": Lang.t("You keep your acorns between runs, and never start one with fewer than %d (level %d/%d).", [p.start_ammo(), p.ammo_level, Weapons.AMMO_UPGRADE_PRICES.size()]),
     })
     out.append({
         "id": NEXT_RUN_ROW,

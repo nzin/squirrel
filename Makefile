@@ -6,7 +6,6 @@
 #   make macos       export the macOS app     -> godot/build/macos/Squirrel.app (runs full screen)
 #   make run         run the game windowed from source
 #   make test        headless smoke test
-#   make sprites     redraw the original opponent sprites (needs Pillow)
 #   make sounds      re-synthesize the sound effects and the arcade music
 #
 # Override the engine path with:  make web GODOT=/path/to/Godot
@@ -25,10 +24,10 @@ GODOT_RELEASE  = $(shell echo $(GODOT_VERSION) | sed 's/\.stable$$//')-stable
 TEMPLATES_ROOT := $(HOME)/Library/Application Support/Godot/export_templates
 TEMPLATES_URL   = https://github.com/godotengine/godot-builds/releases/download/$(GODOT_RELEASE)/Godot_v$(GODOT_RELEASE)_export_templates.tpz
 
-.PHONY: help import run test sprites sounds check-templates templates web serve macos run-macos clean
+.PHONY: help import run test sounds check-templates templates web serve macos run-macos clean
 
 help:
-	@sed -n '2,12p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '2,11p' Makefile | sed 's/^# \{0,1\}//'
 
 import:
 	@$(GODOT) --headless --path $(PROJECT) --import >/dev/null 2>&1 || true
@@ -77,9 +76,6 @@ macos: import check-templates
 run-macos:
 	@test -d $(MACOS_APP) || { echo "No app yet - run 'make macos' first."; exit 1; }
 	open $(MACOS_APP)
-
-sprites:
-	python3 tools/make_sprites.py
 
 sounds:
 	python3 tools/make_sounds.py

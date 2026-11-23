@@ -37,20 +37,11 @@ that take priority over the synthesized `.wav` of the same name:
 To swap any other sound for a better file, drop a file with the same name into the
 folder and add a row here. CC0 / CC-BY music would be fine too (CC-BY needs attribution).
 
-## Original artwork (ours - no licence issue)
+## Original artwork
 
-Drawn in code by [`tools/make_sprites.py`](tools/make_sprites.py) (`make sprites`):
-
-| Files | What |
-|---|---|
-| `hedgehog1/2.png`, `hedgehog_ball.png` | hedgehog (walking, curled up) |
-| `fox1/2.png` | fox |
-| `owl1/2.png` | owl |
-| `bee1/2.png` | bee |
-| `dwarf_idle/talk/happy.png` | the dwarf shopkeeper (three expressions) |
-
-Edit the script and re-run it to change these; `tools/sprite_hitbox.py` prints
-the matching collision box (see below).
+None any more: the only sprites drawn by us (the owl, an earlier hedgehog, fox, bee and dwarf) were
+replaced. The characters are either inherited prototype art (next section) or licensed
+art kept out of the repository (see "Local-only licensed art").
 
 ## Inherited artwork - origin not recorded
 
@@ -76,11 +67,13 @@ without it.
 
 | Local file | Replaces | Fallback |
 |---|---|---|
-| `private/shopkeeper.png` | the shop owner | the original dwarf |
+| `private/shopkeeper.png` (or `assets/shopkeeper.png`, found first) | the shop owner | no figure: the ware descriptions appear in a plain note panel |
 | `private/explosion_1..9.png` | the Exploding Chestnut's explosion animation (9 frames, an orange cartoon blast with a shockwave ring and debris) | the plain orange burst |
 | `private/mushroom_1..10.png` | the Pinecone Bomb's explosion when it hits something in the air (a rising mushroom cloud, 10 frames); also the chestnut's fallback | a plain white ring |
 | `private/groundburst_1..9.png` | the Pinecone Bomb's explosion when it lands (a burst spreading along the ground, 9 frames) | the mushroom cloud, else the ring |
-| `private/bee_1..4.png` | the bee swarm: a cartoon bumblebee, 4 flapping frames | the small synthesized bee |
+| `private/owl_1..3.png` | the owl (run 7+): eyes open, a blink and a sleepy look, shown as a blinking, drowsy owl; it swoops in slow wide waves | **none: no owls spawn** |
+| `private/bee_1..4.png` | the bee swarm (run 8+): a cartoon bumblebee, 4 flapping frames | **none: no bees spawn** |
+| `private/raccoon_1..9.png` | the raccoon (run 9+): 4 prowling frames, plus sitting up, holding a pot, raising it to throw, and eating; it throws nuts at the squirrel | **none: no raccoons spawn** |
 | `private/boar_1..3.png` | the second boss (run 6, 12, ...) with a cleaver-wielding boar, 3 frames for a pseudo animation | a giant croco |
 
 The shopkeeper is the *Explorer character animated game sprite* from
@@ -112,7 +105,7 @@ ignored for that reason).
 - **Safe sources**: [Kenney](https://kenney.nl/assets) (CC0), CC0 packs on
   [OpenGameArt](https://opengameart.org) (check each item's licence; CC-BY needs
   attribution here), free-licence packs on itch.io, or your own drawings
-  (GIMP, or `tools/make_sprites.py`).
+  (GIMP).
 
 ## Adding an enemy from a new sprite
 

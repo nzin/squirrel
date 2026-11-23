@@ -21,7 +21,7 @@ func check_no_shield_run2(e: Enemy) -> void:
 ## Clear the world and stop all spawning so a test fully controls what is on screen.
 func _quiet(game: Node) -> void:
     game.start_run()
-    for key in ["next_box", "next_tree", "next_skunk", "next_beaver", "next_mole", "next_bird", "next_ptero", "next_croco", "next_life", "next_bee", "next_hedgehog", "next_fox", "next_owl"]:
+    for key in ["next_box", "next_tree", "next_skunk", "next_beaver", "next_mole", "next_bird", "next_ptero", "next_croco", "next_life", "next_bee", "next_raccoon", "next_owl"]:
         game.set(key, 1e9)
 
 
@@ -408,13 +408,46 @@ func _initialize() -> void:
     check(pr.equipped == "acorn" and pr.coins == 25, "owned weapons equip for free")
     check(Shop.activate(pr, Shop.AMMO_ROW) == "Pouch upgraded!" and pr.coins == 15 and pr.ammo_level == 1, "buy +1 starting acorn")
     game.start_run()
-    check(game.acorns == 4 and game.loadout.coins == 15, "next run keeps purchases and starts with 4 acorns")
+    check(game.acorns == 4 and game.loadout.coins == 15, "next run keeps purchases; the Bigger Pouch raises the starting minimum to 4")
     game.cycle_weapon()
     check(game.weapon == "spread", "Q cycles through owned weapons")
     game.cycle_weapon()
     check(game.weapon == "acorn", "...and wraps around")
     game.new_game()
     check(game.loadout.coins == 0 and not game.loadout.owns("spread") and game.acorns == 3, "restarting wipes coins, weapons and upgrades")
+
+    print("acorns carry over between runs")
+    game.new_game()
+    _quiet(game)
+    check(game.acorns == 3 and game.loadout.carried_acorns == 3, "a new game starts with 3 acorns")
+    game.acorns = 11
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    check(game.phase == "run_complete" and game.loadout.carried_acorns == 11, "finishing a run keeps its acorns (11)")
+    game.run += 1
+    game.start_run()
+    check(game.acorns == 11, "the next run starts with the same 11 acorns")
+    game.acorns = 1
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    game.run += 1
+    game.start_run()
+    check(game.acorns == 3, "running low: a run never starts with fewer than the minimum (3)")
+    game.loadout.ammo_level = 2
+    game.acorns = 2
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    game.run += 1
+    game.start_run()
+    check(game.acorns == 5, "...and the Bigger Pouch raises that minimum (3 + 2 = 5)")
+    game.acorns = 20
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    game.new_game()
+    check(game.acorns == 3 and game.loadout.carried_acorns == 3, "a new game forgets the old acorns")
+    Lang.current = "fr"
+    check(Lang.t("You keep your acorns between runs, and never start one with fewer than %d (level %d/%d).", [3, 0, 5]).begins_with("Vous gardez"), "the pouch text is translated")
+    Lang.current = "en"
 
     print("run lifecycle")
     game.new_game()
@@ -556,7 +589,31 @@ func _initialize() -> void:
 
 
     print("new opponents (milestone 3)")
-    for entry in [["bee", Game.BEE_FROM_RUN, 3], ["hedgehog", Game.HEDGEHOG_FROM_RUN, 1], ["fox", Game.FOX_FROM_RUN, 1], ["owl", Game.OWL_FROM_RUN, 1]]:
+    var art_kinds: Array = []  # kinds that exist only as licensed local-only art
+    for k: String in ["bee", "owl", "raccoon"]:
+        if Enemy.is_available(k):
+            art_kinds.append(k)
+        else:
+            print("  note %s: local-only art absent - it does not spawn (tested without it)" % k)
+    check(Enemy.is_available("skunk") and Enemy.is_available("beaver") and Enemy.is_available("croco"), "the original opponents are always available")
+    for k: String in ["bee", "owl", "raccoon"]:
+        if not Enemy.is_available(k):
+            game.new_game()
+            game.run = 12
+            game.start_run()
+            _quiet(game)
+            game.set("next_" + k, 0.0)
+            game._spawn_ground_enemies()
+            game._spawn_flyers()
+            check(game.enemies.filter(func(e: Enemy) -> bool: return e.kind == k).is_empty(), "%s: no art installed -> never spawned (and no crash)" % k)
+    var roster := []
+    if art_kinds.has("owl"):
+        roster.append(["owl", Game.OWL_FROM_RUN, 1])
+    if art_kinds.has("bee"):
+        roster.append(["bee", Game.BEE_FROM_RUN, 3])
+    if art_kinds.has("raccoon"):
+        roster.append(["raccoon", Game.RACCOON_FROM_RUN, 1])
+    for entry in roster:
         var nm: String = entry[0]
         var from_run: int = entry[1]
         var counts: Array[int] = []
@@ -570,64 +627,95 @@ func _initialize() -> void:
             game._spawn_flyers()
             counts.append(game.enemies.filter(func(e: Enemy) -> bool: return e.kind == nm).size())
         check(counts[0] == 0 and counts[1] == entry[2], "%s: absent in run %d, appears in run %d (x%d)" % [nm, from_run - 1, from_run, counts[1]])
-    for nm in ["hedgehog", "fox", "owl", "bee"]:
+    var shaped: Array = []
+    shaped.append_array(art_kinds)
+    for nm: String in shaped:
         var en := Enemy.create(nm, 0.0, 0.0)
         var ratio_ok := true
         for f: String in en.cfg["frames"]:
             var tx: Texture2D = Cfg.tex(f)
             ratio_ok = ratio_ok and absf(float(tx.get_width()) / tx.get_height() / (en.w / en.h) - 1.0) < 0.06
-        check(ratio_ok and en.rect().size.x < en.w and en.rect().size.y < en.h, "%s: own artwork, undistorted, tight hitbox" % nm)
+        check(ratio_ok and en.rect().size.x < en.w and en.rect().size.y < en.h, "%s: artwork undistorted (max frame ratio), tight hitbox" % nm)
 
-    var hh := Enemy.create("hedgehog", 500.0, 450.0)
-    var hh_seen: Array[String] = []
-    var hh_fast := 0.0
-    for i in 300:
-        var hx0 := hh.x
-        hh.update(3.0, dt, tgt)
-        if hh_seen.is_empty() or hh_seen[hh_seen.size() - 1] != hh.ai_state:
-            hh_seen.append(hh.ai_state)
-        hh_fast = maxf(hh_fast, hx0 - hh.x)
-    check(hh_seen == ["cruise", "telegraph", "ball"] and hh.curled and hh.frame_idx == 2, "hedgehog: walks, tucks in, then rolls as a ball %s" % [hh_seen])
-    check(hh_fast > 7.0, "...fast (%.1f px/tick)" % hh_fast)
+    if art_kinds.has("raccoon"):
+        var rc := Enemy.create("raccoon", 600.0, 425.0)
+        var rc_target := Rect2(250.0, 460.0, 40.0, 40.0)  # the squirrel, within throwing range (scrolling is off here)
+        var rc_seen: Array[String] = []
+        var rc_shots := 0
+        var rc_frames: Dictionary = {}
+        for i in 420:
+            rc.update(0.0, dt, rc_target)
+            if rc_seen.is_empty() or rc_seen[rc_seen.size() - 1] != rc.ai_state:
+                rc_seen.append(rc.ai_state)
+            rc_frames[rc.frame_idx] = true
+            if rc.take_shot() == "nut":
+                rc_shots += 1
+            rc.take_sound()
+            if rc_seen.size() >= 6:
+                break
+        check(rc_seen.slice(0, 6) == ["cruise", "stand", "wind", "release", "rest", "cruise"], "raccoon: prowls, stands up, takes a nut, throws it, eats %s" % [rc_seen.slice(0, 6)])
+        check(rc_shots >= 1 and rc_frames.has(Enemy.FRAME_SIT) and rc_frames.has(Enemy.FRAME_HOLD) and rc_frames.has(Enemy.FRAME_RAISE) and rc_frames.has(Enemy.FRAME_EAT), "...with a different picture for each step (%d nut thrown)" % rc_shots)
+        var tall := Enemy.create("raccoon", 600.0, 425.0)
+        var walk_h: float = tall.rect().size.y
+        tall.hitbox = tall.cfg["hit_stand"]
+        check(tall.rect().size.y > walk_h and tall.rect().size.y < 60.0, "its hitbox is taller while it stands (%.0f -> %.0f px): still easy to jump over" % [walk_h, tall.rect().size.y])
+    # a nut lob lands where the squirrel was
     game.new_game()
     _quiet(game)
-    var ball := Enemy.create("hedgehog", 300.0, 450.0)
-    ball.curled = true
-    game.layers["ground"].add_child(ball)
-    game.enemies.append(ball)
-    var bounce := Shot.create("acorn", 310.0, 470.0)
-    game._shot_hits_enemies(bounce)
-    check(ball.hp == 2 and not bounce.active, "acorns bounce off a rolled-up hedgehog")
-    var pierce_shot := Shot.create("rainbow", 310.0, 470.0)
-    game._shot_hits_enemies(pierce_shot)
-    check(ball.defeated, "...but the rainbow beam cuts through")
+    var throw_src := Enemy.create("skunk", 600.0, 400.0)  # (any enemy: only its position matters)
+    game.layers["air"].add_child(throw_src)
+    game.enemies.append(throw_src)
+    game._fire_enemy_shot(throw_src, "nut")
+    var lob: EnemyShot = game.enemy_shots[game.enemy_shots.size() - 1]
+    var thrower_box := throw_src.rect()
+    check(lob.rect().get_center().x < thrower_box.position.x and lob.rect().get_center().y > thrower_box.position.y and lob.rect().get_center().y < thrower_box.end.y, "the nut leaves in FRONT of the thrower (left of it, at paw height), not from its head or back")
+    var y_start: float = lob.y
+    var x_start: float = lob.x
+    var always_level := true
+    var always_left := true
+    var last_x: float = lob.x
+    for i in 60:
+        lob.update(dt)
+        always_level = always_level and absf(lob.y - y_start) < 0.001
+        always_left = always_left and lob.x < last_x
+        last_x = lob.x
+    check(always_level and always_left and lob.vy == 0.0 and lob.vx < 0.0, "...and flies in a horizontal straight line (no arc), %.0f px in 60 ticks" % (x_start - lob.x))
+    var lethal_nut := EnemyShot.create("nut", game.squirrel.x + 20.0, game.squirrel.y + 20.0, Vector2.ZERO)
+    game.layers["shots"].add_child(lethal_nut)
+    game.enemy_shots.append(lethal_nut)
+    game.frame(dt)
+    check(game.squirrel.game_over or game.invuln_timer > 0.0, "a nut that hits the squirrel is lethal (like any projectile)")
+    game.new_game()
+    _quiet(game)
+    var shot_nut := EnemyShot.create("nut", 400.0, 470.0, Vector2(-1.0, 0.0))
+    game.layers["shots"].add_child(shot_nut)
+    game.enemy_shots.append(shot_nut)
+    var acorn_vs_nut := Shot.create("acorn", 395.0, 470.0)
+    game._shot_hits_enemy_shots(acorn_vs_nut)
+    check(not shot_nut.active, "an acorn knocks a nut out of the air")
 
-    var fx_enemy := Enemy.create("fox", 600.0, 440.0)
-    var fx_seen: Array[String] = []
-    var fx_top := 1e9
-    for i in 300:
-        fx_enemy.update(3.0, dt, tgt)
-        if fx_seen.is_empty() or fx_seen[fx_seen.size() - 1] != fx_enemy.ai_state:
-            fx_seen.append(fx_enemy.ai_state)
-        fx_top = minf(fx_top, fx_enemy.y)
-    check(fx_seen == ["cruise", "telegraph", "air", "run"] and fx_top < 440.0 - 40.0, "fox: runs fast, crouches, pounces (%.0f px high) %s" % [440.0 - fx_top, fx_seen])
+    if art_kinds.has("owl"):
+        var owl_e := Enemy.create("owl", 600.0, 270.0)
+        var owl_lo := 1e9
+        var owl_hi := -1e9
+        var owl_pics: Dictionary = {}
+        for i in 360:
+            owl_e.update(0.0, dt, tgt)
+            owl_lo = minf(owl_lo, owl_e.y)
+            owl_hi = maxf(owl_hi, owl_e.y)
+            owl_pics[owl_e.frame_idx] = true
+        check(owl_hi - owl_lo > 150.0, "owl: slow wide swoops (%.0f px)" % (owl_hi - owl_lo))
+        check(owl_pics.has(0) and owl_pics.has(3) and owl_pics.has(6), "...blinking now and then and getting drowsy (%d pictures used)" % owl_pics.size())
 
-    var owl_e := Enemy.create("owl", 600.0, 270.0)
-    var owl_lo := 1e9
-    var owl_hi := -1e9
-    for i in 360:
-        owl_e.update(0.0, dt, tgt)
-        owl_lo = minf(owl_lo, owl_e.y)
-        owl_hi = maxf(owl_hi, owl_e.y)
-    check(owl_hi - owl_lo > 150.0, "owl: slow wide swoops (%.0f px)" % (owl_hi - owl_lo))
-    var bee_e := Enemy.create("bee", 600.0, 300.0)
-    var bee_lo := 1e9
-    var bee_hi := -1e9
-    for i in 120:
-        bee_e.update(0.0, dt, tgt)
-        bee_lo = minf(bee_lo, bee_e.y)
-        bee_hi = maxf(bee_hi, bee_e.y)
-    check(bee_hi - bee_lo > 80.0 and bee_e.hp == 1, "bee: fast zigzag, one hit kills (%.0f px)" % (bee_hi - bee_lo))
+    if art_kinds.has("bee"):
+        var bee_e := Enemy.create("bee", 600.0, 300.0)
+        var bee_lo := 1e9
+        var bee_hi := -1e9
+        for i in 120:
+            bee_e.update(0.0, dt, tgt)
+            bee_lo = minf(bee_lo, bee_e.y)
+            bee_hi = maxf(bee_hi, bee_e.y)
+        check(bee_hi - bee_lo > 80.0 and bee_e.hp == 1, "bee: fast zigzag, one hit kills (%.0f px)" % (bee_hi - bee_lo))
 
     print("smarter enemies: protection")
     game.new_game()
@@ -1238,7 +1326,7 @@ func _initialize() -> void:
     down.pressed = true
     game._menu_input(down)
     check(game.shop_selection == 1, "Down moves the shop selection")
-    check(game.hud.shop_dwarf.visible, "the dwarf shopkeeper stands in the shop")
+    check(game.hud.shop_dwarf.visible == game.hud.has_keeper, "the shopkeeper figure shows in the shop only if its local art exists (%s)" % game.hud.has_keeper)
     game.new_game()
     game._enter_shop()
     check(game.shop_message == "Welcome! Take a look at my wares.", "he greets you")
@@ -1252,9 +1340,9 @@ func _initialize() -> void:
     check(game.shop_mood == "idle" and game.shop_message == "" and game.hud.shop_mood_shown != "happy", "...and calms down when you browse again")
     game.new_game()
     game.frame(dt)
-    check(not game.hud.shop_dwarf.visible, "he stays in the shop")
+    check(not game.hud.shop_dwarf.visible, "...and stays in the shop")
     Lang.current = "fr"
-    check(Lang.t("Welcome! Take a look at my wares.").begins_with("Bienvenue") and Lang.t("Ready for the next run?").begins_with("Prêt"), "the dwarf speaks French too")
+    check(Lang.t("Welcome! Take a look at my wares.").begins_with("Bienvenue") and Lang.t("Ready for the next run?").begins_with("Prêt"), "the shop texts are translated")
     Lang.current = "en"
     game.new_game()
 

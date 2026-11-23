@@ -14,8 +14,8 @@ extends Entity
 ##    charge  walks, blinks, then dashes (beaver)
 ##    hop     leaps in short jumps (croco)
 ##    burrow  mole: tunnels toward the squirrel and surfaces just ahead of it
-##    roll    hedgehog: curls into a spiky ball and rolls at you - acorns bounce off
-##    pounce  fox: runs fast, crouches, then leaps at you
+##    throw   raccoon: walks, stands up, throws a nut at you, eats, walks on
+## Kinds marked "private_only" (bee, owl, raccoon) use licensed local-only art: see is_available().
 ## (owl and bee use `wave` with their own "wave_amp" / "wave_freq": a slow wide
 ## swoop and a fast jittery zigzag)
 ## Protection: `shielded` blocks shots from the front (not rainbow, bombs, or a
@@ -66,38 +66,44 @@ const KINDS := {
         "interval": 1.0, "random_frames": false, "forward": -1.0, "fall_vx": -3.0,
         "ai": "dive", "shoot": "fire", "shoot_from": 5,
     },
-    "hedgehog": {
-        "hit": Rect2(0.09, 0.15, 0.83, 0.78), "coins": 7,
-        "w": 70.0, "h": 50.0, "air": false, "hp": 2,
-        "frames": ["hedgehog1.png", "hedgehog2.png", "hedgehog_ball.png"], "anim_frames": 2,  # last = curled up
-        "interval": 0.25, "random_frames": false, "forward": -0.5, "fall_vx": -2.5,
-        "ai": "roll",
+    # The raccoon (licensed art, local-only - see CREDITS.md) walks in, then stands up and
+    # throws nuts at the squirrel. Without its art files it simply does not spawn.
+    "raccoon": {
+        "hit": Rect2(0.03, 0.49, 0.91, 0.46), "hit_stand": Rect2(0.16, 0.28, 0.71, 0.64), "coins": 9,
+        "w": 100.0, "h": 75.0, "air": false, "hp": 2,
+        "frames": [], "private_only": true,
+        "interval": 0.13, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
+        "ai": "throw", "can_shield": true,
+        "private": {
+            "frames": ["res://private/raccoon_1.png", "res://private/raccoon_2.png", "res://private/raccoon_3.png",
+                "res://private/raccoon_4.png", "res://private/raccoon_5.png", "res://private/raccoon_6.png",
+                "res://private/raccoon_7.png", "res://private/raccoon_8.png", "res://private/raccoon_9.png"],
+            "anim_frames": 4,  # frames 1-4 are the walk cycle; 5 holds the pot, 6 raises it, 8 sits up, 9 eats
+        },
     },
-    "fox": {
-        "hit": Rect2(0.17, 0.24, 0.75, 0.62), "coins": 7,
-        "w": 90.0, "h": 56.0, "air": false, "hp": 2,
-        "frames": ["fox1.png", "fox2.png"],
-        "interval": 0.18, "random_frames": false, "forward": -2.8, "fall_vx": -2.5,
-        "ai": "pounce", "can_shield": true,
-    },
+    # The owl (licensed art, local-only) swoops in slow wide waves, blinking now and then; it
+    # does not spawn without its art files.
     "owl": {
-        "hit": Rect2(0.09, 0.12, 0.83, 0.85), "coins": 8,
-        "w": 70.0, "h": 76.0, "air": true, "hp": 2,
-        "frames": ["owl1.png", "owl2.png"],
-        "interval": 0.4, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
+        "hit": Rect2(0.08, 0.08, 0.84, 0.86), "coins": 8,
+        "w": 52.0, "h": 80.0, "air": true, "hp": 2,
+        "frames": [], "private_only": true,
+        "interval": 0.28, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
         "ai": "wave", "wave_amp": 105.0, "wave_freq": 1.5, "can_shield": true,
+        "private": {
+            # eyes open, open, open, blink, open, open, sleepy: a blinking, drowsy owl
+            "frames": ["res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_2.png",
+                "res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_3.png"],
+        },
     },
+    # The bee swarm (licensed art, local-only) does not spawn without its art files.
     "bee": {
-        "hit": Rect2(0.11, 0.31, 0.76, 0.54), "coins": 2,
-        "w": 40.0, "h": 32.0, "air": true, "hp": 1,
-        "frames": ["bee1.png", "bee2.png"],
-        "interval": 0.08, "random_frames": false, "forward": -1.6, "fall_vx": -2.5,
+        "hit": Rect2(0.15, 0.18, 0.74, 0.72), "coins": 2,
+        "w": 62.0, "h": 38.0, "air": true, "hp": 1,
+        "frames": [], "private_only": true,
+        "interval": 0.07, "random_frames": false, "forward": -1.6, "fall_vx": -2.5,
         "ai": "wave", "wave_amp": 50.0, "wave_freq": 7.0,
-        # A cartoon bumblebee (licensed art, local-only like the boar - see CREDITS.md)
-        # replaces the little synthesized bee when its files are present.
         "private": {
             "frames": ["res://private/bee_1.png", "res://private/bee_2.png", "res://private/bee_3.png", "res://private/bee_4.png"],
-            "w": 62.0, "h": 38.0, "hit": Rect2(0.15, 0.18, 0.74, 0.72), "interval": 0.07,
         },
     },
     # Bosses: big versions of ordinary sprites. They walk in, stand and spit
@@ -149,11 +155,16 @@ const DIVE_TRIGGER := 360.0
 const DIVE_SPEED := 7.5
 const HOP_SPEED := -11.5
 const HOP_FORWARD := -3.0
-const ROLL_TRIGGER := 300.0
-const ROLL_SPEED := 5.0
-const POUNCE_TRIGGER := 270.0
-const POUNCE_VY := -12.5
-const POUNCE_FORWARD := -6.5
+const THROW_MIN_GAP := 170.0   # the raccoon throws when the squirrel is between these distances away
+const THROW_MAX_GAP := 430.0
+const THROW_STAND := 0.4       # sits up (blinks yellow), then raises the nut...
+const THROW_WIND := 0.25
+const THROW_RELEASE := 0.3     # ...and throws it
+const THROW_REST := 0.7        # eats while the next nut is prepared
+const FRAME_HOLD := 4
+const FRAME_RAISE := 5
+const FRAME_SIT := 7
+const FRAME_EAT := 8
 const BURROW_SPEED := -2.5
 const SURFACE_DISTANCE := 170.0
 const WAVE_AMP := 35.0
@@ -189,7 +200,6 @@ var fall_vy := 0.0
 var speed_mult := 1.0
 var shielded := false
 var enraged := false
-var curled := false        # hedgehog rolled into a ball: shots bounce off
 var can_enrage := false    # set by scale_for_run (run 4+)
 var flash := 0.0           # white flash after a hit (s)
 var shield_flash := 0.0
@@ -216,6 +226,13 @@ static func create(enemy_kind: String, px: float, py: float) -> Enemy:
 
 
 ## True when every frame of the optional local-only art of `kind_cfg` is present.
+## Can this kind be spawned? Kinds that only exist as licensed local-only art
+## (bee, raccoon) need their frames in godot/private/; everything else always can.
+static func is_available(enemy_kind: String) -> bool:
+    var c: Dictionary = KINDS[enemy_kind]
+    return not c.get("private_only", false) or Enemy.private_art_available(c)
+
+
 static func private_art_available(kind_cfg: Dictionary) -> bool:
     for f: String in kind_cfg["private"]["frames"]:
         if not ResourceLoader.exists(f):
@@ -235,7 +252,7 @@ func setup(enemy_kind: String, px: float, py: float) -> void:
     kind = enemy_kind
     cfg = KINDS[kind]
     if cfg.has("private") and Enemy.private_art_available(cfg):
-        cfg = cfg.merged(cfg["private"], true)  # the optional local-only art replaces the stand-in
+        cfg = cfg.merged(cfg["private"], true)  # the local-only art replaces the stand-in (or is the only art)
     w = cfg["w"]
     h = cfg["h"]
     hp = cfg["hp"]
@@ -254,6 +271,8 @@ func setup(enemy_kind: String, px: float, py: float) -> void:
         mole_interval = randf_range(3.0, 5.0)
     if ai == "hop":
         ai_timer = randf_range(0.6, 1.4)
+    if ai == "throw":
+        ai_timer = randf_range(0.5, 1.2)  # a short walk before the first throw
     _show_frame(0)
 
 
@@ -287,13 +306,12 @@ func hittable() -> bool:
     return not (kind == "mole" and underground)
 
 
-## Does the shield (or the hedgehog's curled-up spikes) stop `sh`? A shield only
-## stops shots coming from the front, a ball stops everything; neither stops
-## shots that break shields (rainbow beam) - bombs use blast damage instead.
+## Does the shield stop `sh`? Only shots coming from the front, and not the ones that
+## break shields (rainbow beam) - bombs use blast damage instead.
 func blocks(sh: Shot) -> bool:
     if sh.breaks_shield:
         return false
-    return curled or (shielded and sh.vx > 0.0)
+    return shielded and sh.vx > 0.0
 
 
 ## Apply a hit. Returns true if this hit defeated it.
@@ -347,10 +365,8 @@ func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
                 _update_diver(scroll_speed, delta, target)
             "hop":
                 _update_hopper(scroll_speed, delta)
-            "roll":
-                _update_roller(scroll_speed, delta, target)
-            "pounce":
-                _update_pouncer(scroll_speed, delta, target)
+            "throw":
+                _update_thrower(scroll_speed, delta, target)
             _:
                 _update_walker(scroll_speed, delta)
                 if ai == "wave":
@@ -441,65 +457,53 @@ func _update_diver(scroll_speed: float, delta: float, target: Rect2) -> void:
         active = false
 
 
-func _update_roller(scroll_speed: float, delta: float, target: Rect2) -> void:
+func _update_thrower(scroll_speed: float, delta: float, target: Rect2) -> void:
     prev_x = x
-    var ts := Cfg.time_scale
     match ai_state:
-        "cruise":
+        "cruise":  # prowling
             x -= scroll_speed
             x += _forward()
             _animate(delta)
-            if target.size != Vector2.ZERO and _gap_to(target) < ROLL_TRIGGER and _gap_to(target) > 0.0:
-                ai_state = "telegraph"
+            ai_timer -= delta
+            var gap := _gap_to(target)
+            if ai_timer <= 0.0 and target.size != Vector2.ZERO and gap > THROW_MIN_GAP and gap < THROW_MAX_GAP and x < Cfg.SCREEN_W - w:
+                ai_state = "stand"
                 ai_timer = 0.0
+                hitbox = cfg["hit_stand"]
+                _show_frame(FRAME_SIT)
                 pending_sound = "warn"
-        "telegraph":  # tucks its head in
+        "stand":  # sits up: a visible warning that a nut is coming
             x -= scroll_speed
             ai_timer += delta
             _blink = BLINK_YELLOW if int(ai_timer * 14.0) % 2 == 0 else Color.WHITE
-            if ai_timer >= TELEGRAPH:
-                ai_state = "ball"
-                pending_sound = "roll"
-                curled = true
-                _show_frame(2)
-                sprite.centered = true  # spin around its middle
-                sprite.position = Vector2(w / 2.0, h / 2.0)
-        "ball":
-            x -= scroll_speed + ROLL_SPEED * speed_mult * ts
-            sprite.rotation -= 0.4 * ts
-    if x + w < 0.0:
-        active = false
-
-
-func _update_pouncer(scroll_speed: float, delta: float, target: Rect2) -> void:
-    prev_x = x
-    var ts := Cfg.time_scale
-    match ai_state:
-        "cruise", "run":
-            x -= scroll_speed
-            x += _forward()
-            _animate(delta)
-            if ai_state == "cruise" and target.size != Vector2.ZERO and _gap_to(target) < POUNCE_TRIGGER and _gap_to(target) > 0.0:
-                ai_state = "telegraph"
+            if ai_timer >= THROW_STAND:
+                ai_state = "wind"
                 ai_timer = 0.0
-                pending_sound = "warn"
-        "telegraph":  # crouches
+                _show_frame(FRAME_HOLD)
+        "wind":  # takes the nut out of the pot
             x -= scroll_speed
             ai_timer += delta
-            _blink = BLINK_RED if int(ai_timer * 14.0) % 2 == 0 else Color.WHITE
-            if ai_timer >= TELEGRAPH * 0.8:
-                ai_state = "air"
-                vy = POUNCE_VY
-                pending_sound = "pounce"
-        "air":
-            vy += Cfg.GRAVITY * ts
-            y += vy * ts
+            if ai_timer >= THROW_WIND:
+                ai_state = "release"
+                ai_timer = 0.0
+                _show_frame(FRAME_RAISE)
+                pending_shot = "nut"
+                pending_sound = "throw_acorn"
+        "release":
             x -= scroll_speed
-            x += POUNCE_FORWARD * speed_mult * ts
-            if y >= base_y:
-                y = base_y
-                vy = 0.0
-                ai_state = "run"
+            ai_timer += delta
+            if ai_timer >= THROW_RELEASE:
+                ai_state = "rest"
+                ai_timer = 0.0
+                _show_frame(FRAME_EAT)
+        "rest":  # snacks, then walks on
+            x -= scroll_speed
+            ai_timer += delta
+            if ai_timer >= THROW_REST / (1.5 if enraged else 1.0):
+                ai_state = "cruise"
+                ai_timer = randf_range(1.2, 2.2)
+                hitbox = cfg["hit"]
+                _show_frame(0)
     if x + w < 0.0:
         active = false
 
