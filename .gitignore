@@ -3,3 +3,5 @@ docs/shop.png
 docs/local-*.png
 # listening demos of candidate music (not part of the game until one is chosen)
 docs/music-demo/
+push.sh
+.DS_Store
