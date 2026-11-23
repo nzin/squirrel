@@ -116,6 +116,44 @@ func _initialize() -> void:
     check(game.acorns >= 4 and game.acorns <= 6, "box gave 1-3 acorns (acorns=%d)" % game.acorns)
     check(game.loadout.coins >= 1, "box also gave a coin (coins=%d)" % game.loadout.coins)
 
+    print("falling off a cloud")
+    game.new_game()
+    _quiet(game)
+    var cloud_a := Cloud.new()
+    cloud_a.setup(0.0, 300.0)
+    var cloud_b := Cloud.new()
+    cloud_b.setup(0.0, 300.0)
+    game.layers["clouds"].add_child(cloud_a)
+    game.layers["clouds"].add_child(cloud_b)
+    var bounces := 0
+    var runs := 0
+    for overlap in range(1, 40, 2):  # every way of reaching the end of a cloud
+        for gap in [Cfg.CLOUD_SPACING, Cfg.CLOUD_SPACING - 20.0, 30.0]:
+            cloud_a.x = game.squirrel.x + float(overlap) - cloud_a.w
+            cloud_b.x = cloud_a.x + cloud_a.w + gap
+            game.squirrel.y = 300.0 - game.squirrel.h
+            game.squirrel.velocity_y = 0.0
+            game.squirrel.is_jumping = false
+            var last_y: float = game.squirrel.y
+            for i in 60:
+                cloud_a.x -= Cfg.SCROLL_SPEED
+                cloud_b.x -= Cfg.SCROLL_SPEED
+                game.squirrel.update([], [cloud_a, cloud_b])
+                if game.squirrel.y < last_y - 0.01:
+                    bounces += 1
+                    break
+                last_y = game.squirrel.y
+            runs += 1
+    check(bounces == 0, "falling off a cloud's end never snaps the squirrel back up onto the next cloud (%d of %d cases)" % [bounces, runs])
+    game.squirrel.y = 100.0  # now a normal fall from above still lands on a cloud
+    game.squirrel.velocity_y = 0.0
+    cloud_b.x = game.squirrel.x - 20.0
+    cloud_a.x = 5000.0
+    for i in 60:
+        game.squirrel.update([], [cloud_a, cloud_b])
+    check(absf(game.squirrel.y + game.squirrel.h - 300.0) < 1.0, "...but a fall from above still lands on top of a cloud")
+    game.new_game()
+
     print("standing on a tree")
     game.new_game()
     game.next_box = 1e9

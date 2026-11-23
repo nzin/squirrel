@@ -5,6 +5,7 @@ extends Entity
 ##  - clouds, tree tops and enemies are one-way platforms: pass through going up, land when falling
 
 const START_X := 50.0
+const LAND_TOLERANCE := 1.0  # px: how far below a platform top the feet may start and still land on it
 
 var velocity_y := 0.0
 var is_jumping := false
@@ -107,7 +108,10 @@ func update(boxes: Array, clouds: Array) -> void:
             if not c.active:
                 continue
             var cr := c.rect()
-            if cr.intersects(sq) and prev_y <= cr.position.y:
+            # land only when the FEET were at or above the top last tick. (Comparing the
+            # head with the top let a squirrel falling past a cloud's side get snapped up
+            # onto the next cloud as it scrolled in.)
+            if cr.intersects(sq) and prev_y + h <= cr.position.y + LAND_TOLERANCE:
                 new_y = cr.position.y - h
                 velocity_y = 0.0
                 is_jumping = false
