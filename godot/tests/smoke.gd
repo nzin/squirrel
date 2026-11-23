@@ -625,8 +625,13 @@ func _initialize() -> void:
     game.frame(dt)
     game._damage_enemy(game.boss, 999)
     var coins_before: int = game.loadout.coins
-    game.frame(dt)
-    check(game.phase == "run_complete" and game.complete_boss, "defeating the boss completes the run")
+    for i in 110:  # ~1.8 s after the kill the game is still running
+        game.frame(dt)
+    var still_running: bool = game.phase == "run" and game.fade_dir == 0
+    for i in 20:
+        game.frame(dt)
+    check(still_running, "the game keeps running for ~2 s after the boss is defeated")
+    check(game.phase == "run_complete" and game.complete_boss, "...then defeating the boss completes the run")
     check(game.loadout.coins >= coins_before + Game.RUN_BONUS_PER_RUN * 3 and game.score >= 10, "boss pays coins and 10 points")
     check(not Game.is_boss_run(1) and not Game.is_boss_run(2) and Game.is_boss_run(3) and Game.is_boss_run(6), "every 3rd run is a boss run")
 
@@ -1104,7 +1109,8 @@ func _initialize() -> void:
     game.run_time = Game.RUN_SECONDS - 0.01
     game.frame(dt)
     game._damage_enemy(game.boss, 999)
-    game.frame(dt)
+    for i in 130:  # the game runs on for 2 s after the kill
+        game.frame(dt)
     check(game.complete_life and game.loadout.lives == 4 and game.hud.banner.text.contains("+1 life"), "defeating a boss earns a life")
     check(Enemy.KINDS["skunk"]["coins"] >= 3 and Enemy.KINDS["ptero"]["coins"] >= 8 and Enemy.KINDS["croco"]["coins"] > Enemy.KINDS["skunk"]["coins"], "kills pay more, depending on the opponent")
 
@@ -1180,8 +1186,8 @@ func _initialize() -> void:
     game.frame(dt)
     check(a.current_music == "boss" and a.heard("boss_roar"), "the boss brings its own music and a roar")
     game._damage_enemy(game.boss, 999)
-    game.frame(dt)
-    game.frame(dt)
+    for i in 130:
+        game.frame(dt)
     check(a.heard("boss_defeated") and a.current_music == "", "boss defeated: fanfare, music pauses")
     game._enter_shop()
     game.frame(dt)

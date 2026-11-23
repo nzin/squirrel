@@ -20,6 +20,7 @@ const FLASH_TIME := 0.22     # the white flash at the start of an explosion
 const FLASH_STRENGTH := 0.65
 const FADE_TIME := 0.45
 const ANNOUNCE_TIME := 2.0
+const BOSS_VICTORY_TIME := 2.0  # the game keeps running this long after the boss falls, before the run ends
 
 # Matrix Fist timeline (real seconds): the attack starts at second 0 - the squirrel
 # dashes out across the whole screen (0-1.5 s) and back (1.5-3 s), punching
@@ -77,6 +78,7 @@ var gap_factor := 1.0          # < 1 = enemies spawn closer together
 var scroll_offset := 0.0
 var boss: Enemy = null
 var boss_spawned := false
+var boss_down_time := -1.0     # seconds since the boss was defeated (-1 = still standing)
 var complete_timer := 0.0
 var complete_bonus := 0
 var complete_boss := false
@@ -221,6 +223,7 @@ func start_run() -> void:
     scroll_offset = 0.0
     boss = null
     boss_spawned = false
+    boss_down_time = -1.0
     announce_text = ""
     announce_timer = 0.0
     acorns = loadout.acorns_for_next_run()  # kept from the previous run (see Loadout)
@@ -293,7 +296,10 @@ func _advance_run(delta: float) -> void:
         announce_timer -= delta
     if boss_spawned:
         if boss != null and boss.defeated:
-            _complete_run(true)
+            # the world keeps going for a moment so the kill can be enjoyed, then the run ends
+            boss_down_time = maxf(boss_down_time, 0.0) + delta
+            if boss_down_time >= BOSS_VICTORY_TIME:
+                _complete_run(true)
     elif run_time >= RUN_SECONDS:
         if is_boss_run(run):
             _spawn_boss()
