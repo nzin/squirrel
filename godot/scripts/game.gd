@@ -387,7 +387,14 @@ func do_jump() -> void:
 
 func do_throw() -> void:
     var id := weapon
-    var cost: int = Weapons.DEFS[id]["ammo"]
+    # a consumable weapon (the exploding chestnut) spends its own stock, not acorns
+    var uses_stock := false
+    if Weapons.DEFS[id].has("stock"):
+        if loadout.stock_left(id) > 0:
+            uses_stock = true
+        else:
+            id = "acorn"  # out of chestnuts: back to plain acorns
+    var cost: int = 0 if uses_stock else Weapons.DEFS[id]["ammo"]
     if acorns < cost:
         # not enough ammo for the fancy weapon: fall back to a plain acorn
         id = "acorn"
@@ -395,6 +402,11 @@ func do_throw() -> void:
         if acorns < cost:
             return
     acorns -= cost
+    if uses_stock:
+        loadout.stock[id] = loadout.stock_left(id) - 1
+        if loadout.stock_left(id) <= 0:  # that was the last one
+            weapon = "acorn"
+            loadout.equip("acorn")
     audio.sfx("throw_" + id)
     var sx := squirrel.x + squirrel.w
     var sy := squirrel.y + int(squirrel.h / 2.0)
@@ -967,7 +979,7 @@ func _hud_state() -> Dictionary:
     var boss_alive := boss != null and not boss.defeated and boss.active
     return {
         "score": score, "acorns": acorns, "coins": loadout.coins, "best": profile.best_score,
-        "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"],
+        "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"], "weapon_stock": loadout.stock_left(weapon),
         "run": run, "in_run": phase == "run",
         "fists": loadout.fists, "lives": loadout.lives,
         "matrix": clampf((1.0 - Cfg.time_scale) / (1.0 - FIST_SLOW), 0.0, 1.0),
@@ -1157,7 +1169,7 @@ func _shot_hits_enemies(sh: Shot) -> void:
     for e: Enemy in enemies:
         if not e.hittable() or not e.rect().intersects(sr):
             continue
-        if e.blocks(sh) and sh.kind != "pinecone":  # the shield stops it (bombs still blast)
+        if e.blocks(sh) and sh.blast_radius <= 0.0:  # the shield stops it (explosives still blast)
             e.shield_flash = 0.15
             audio.sfx("shield_clang")
             if sh.kind == "boomerang":  # bounces off and flies back
@@ -1174,8 +1186,8 @@ func _shot_hits_enemies(sh: Shot) -> void:
                 continue
             sh.hit_ids[id] = true
             _damage_enemy(e, sh.damage)
-        elif sh.kind == "pinecone":
-            sh.detonate()  # damage is dealt by _blast
+        elif sh.blast_radius > 0.0:
+            sh.detonate()  # explosives (pinecone, chestnut): damage is dealt by _blast
             return
         else:
             sh.active = false
@@ -1190,7 +1202,10 @@ func _shot_hits_enemy_shots(sh: Shot) -> void:
         if es.active and es.rect().intersects(sr):
             es.active = false
             if not sh.pierce:
-                sh.active = false
+                if sh.blast_radius > 0.0:
+                    sh.detonate()
+                else:
+                    sh.active = false
                 return
 
 

@@ -77,6 +77,8 @@ without it.
 | Local file | Replaces | Fallback |
 |---|---|---|
 | `private/shopkeeper.png` | the shop owner | the original dwarf |
+| `private/explosion_1..9.png` | the Exploding Chestnut's explosion animation (9 frames, an orange cartoon blast with a shockwave ring and debris) | the plain orange burst |
+| `private/bee_1..4.png` | the bee swarm: a cartoon bumblebee, 4 flapping frames | the small synthesized bee |
 | `private/boar_1..3.png` | the second boss (run 6, 12, ...) with a cleaver-wielding boar, 3 frames for a pseudo animation | a giant croco |
 
 The shopkeeper is the *Explorer character animated game sprite* from

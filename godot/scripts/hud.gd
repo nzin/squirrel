@@ -147,7 +147,10 @@ func refresh(st: Dictionary) -> void:
     var font := coin_label.get_theme_font("font")
     var text_w := font.get_string_size(coin_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
     coin_icon.position = Vector2(Cfg.SCREEN_W - 10.0 - text_w - 30.0, 47.0)
-    weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
+    if st["weapon_stock"] >= 0:  # a consumable weapon shows how many are left
+        weapon_label.text = Lang.t("%s (x%d)  [Q]", [Lang.t(st["weapon"]), st["weapon_stock"]])
+    else:
+        weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
 
     var fists: int = st["fists"]
     fist_icon.visible = in_run and fists > 0 and not in_shop

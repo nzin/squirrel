@@ -305,6 +305,37 @@ func _initialize() -> void:
         nut.update(game.squirrel, [])
         lowest = maxf(lowest, nut.y + nut.h)
     check(lowest <= Cfg.SOIL_Y + 0.01, "chestnut bounces on the ground line")
+    var boom_nut := Shot.create("chestnut", 140.0, 470.0)
+    var ticks_to_boom := 0
+    while not boom_nut.exploding and ticks_to_boom < 600:
+        boom_nut.update(game.squirrel, [])
+        ticks_to_boom += 1
+    check(boom_nut.exploding and boom_nut.bounce_count == Shot.CHESTNUT_BOUNCES and boom_nut.blast_radius == 75.0, "the chestnut explodes on its 3rd bounce (%d ticks)" % ticks_to_boom)
+    var boom_frames := Shot.explosion_art()
+    check(boom_frames.size() == 0 or boom_frames.size() == 9, "the explosion animation has all 9 frames or none (%d)" % boom_frames.size())
+    check(boom_nut.blast_ticks == float(Shot.CHESTNUT_BLAST_TICKS) if boom_frames.size() == 9 else boom_nut.blast_ticks == float(Shot.BLAST_TICKS), "...and lasts as long as its animation needs")
+    game.new_game()
+    _quiet(game)
+    var v1 := Enemy.create("skunk", 400.0, 430.0)
+    var v2 := Enemy.create("skunk", 440.0, 430.0)
+    var v3 := Enemy.create("skunk", 700.0, 430.0)
+    for en in [v1, v2, v3]:
+        game.layers["ground"].add_child(en)
+        game.enemies.append(en)
+    var contact_nut := Shot.create("chestnut", 405.0, 480.0)
+    game._add_shot(contact_nut)
+    game._shot_hits_enemies(contact_nut)
+    check(contact_nut.exploding and contact_nut.active and not v1.defeated, "a chestnut that hits an enemy explodes instead of vanishing")
+    game._update_shots()
+    check(v1.defeated and v2.defeated and not v3.defeated, "the explosion hurts everything close by, and only that")
+    var shielded := Enemy.create("beaver", 300.0, 420.0)
+    shielded.shielded = true
+    game.layers["ground"].add_child(shielded)
+    game.enemies.append(shielded)
+    var shield_nut := Shot.create("chestnut", 300.0, 440.0)
+    game._add_shot(shield_nut)
+    game._shot_hits_enemies(shield_nut)
+    check(shield_nut.exploding, "...and a shield doesn't stop it exploding")
 
     print("hitboxes ignore empty sprite area")
     var sk3 := Enemy.create("skunk", 0.0, 0.0)
@@ -936,6 +967,7 @@ func _initialize() -> void:
     for wid in ["acorn", "spread", "boomerang", "chestnut", "pinecone", "rainbow", "homing"]:
         game.weapon = wid
         game.acorns = 9
+        game.loadout.stock["chestnut"] = 10  # (a consumable: it needs chestnuts in the bag)
         a.played.clear()
         game.do_throw()
         check(a.heard("throw_" + wid), "weapon %s has its own throw sound" % wid)
@@ -995,6 +1027,46 @@ func _initialize() -> void:
     snd_down.pressed = true
     game._menu_input(snd_down)
     check(a.heard("ui_move") and a._speak_left > 0, "browsing ticks, and the dwarf mumbles his description")
+
+    print("exploding chestnut packs")
+    game.new_game()
+    _quiet(game)
+    var cp: Loadout = game.loadout
+    cp.coins = 120
+    check(not cp.owns("chestnut") and cp.stock_left("chestnut") == 0 and cp.stock_left("acorn") == -1, "no chestnuts at the start of a game")
+    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 10 and cp.coins == 70 and cp.equipped == "chestnut", "one purchase = a pack of 10 chestnuts (equipped)")
+    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 20 and cp.coins == 20, "buying again adds another 10")
+    var crow: Dictionary = Shop.rows(cp, 2, false).filter(func(r: Dictionary) -> bool: return r["id"] == "chestnut")[0]
+    check(crow["name"].contains("x10") and crow["name"].contains("(20 left)") and crow["status"] == "50 coins", "the shop shows the pack size and what is left")
+    cp.coins = 10
+    check(Shop.activate(cp, "chestnut") == "Not enough coins." and cp.stock_left("chestnut") == 20, "too poor for another pack")
+    game.start_run()
+    game.weapon = "chestnut"
+    game.acorns = 3
+    game.do_throw()
+    check(cp.stock_left("chestnut") == 19 and game.acorns == 3 and game.shots.size() == 1 and game.shots[0].kind == "chestnut", "a throw uses a chestnut, not an acorn")
+    game.frame(dt)
+    check(game.hud.weapon_label.text.contains("(x19)"), "the HUD shows how many chestnuts are left (%s)" % game.hud.weapon_label.text)
+    cp.stock["chestnut"] = 1
+    game.do_throw()
+    check(cp.stock_left("chestnut") == 0 and game.weapon == "acorn" and cp.equipped == "acorn", "the last chestnut switches you back to acorns")
+    var before_acorns: int = game.acorns
+    game.weapon = "chestnut"
+    game.do_throw()
+    check(game.shots[game.shots.size() - 1].kind == "acorn" and game.acorns == before_acorns - 1, "with none left a throw is a plain acorn")
+    cp.stock["chestnut"] = 5
+    game.weapon = "acorn"
+    var cycled: Array[String] = []
+    for i in 3:
+        game.cycle_weapon()
+        cycled.append(game.weapon)
+    check(cycled.has("chestnut"), "Q cycles to the chestnut only while you have some %s" % [cycled])
+    check(Lang.t("(%d left)", [3]) == "(3 left)", "...")
+    Lang.current = "fr"
+    check(Lang.t("(%d left)", [3]) == "(3 restantes)" and Lang.t("Sold in packs of %d; uses no acorns.", [10]).contains("lot de 10"), "pack texts are translated")
+    Lang.current = "en"
+    game.new_game()
+    check(game.loadout.stock_left("chestnut") == 0, "a new game empties the bag")
 
     print("sound volumes")
     game.new_game()
