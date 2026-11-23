@@ -94,7 +94,8 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             vx = 7.0
             vy = -5.0
             gravity = 0.45
-            blast_radius = 75.0  # the explosion hurts everything close by (1 damage each)
+            damage = 2           # the explosion deals 2 damage...
+            blast_radius = 75.0  # ...to every opponent close by (within 75 px), not just the one it touched
         "pinecone":
             w = 22.0
             h = 28.0

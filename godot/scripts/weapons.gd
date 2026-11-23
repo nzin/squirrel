@@ -16,7 +16,7 @@ const DEFS := {
         "desc": "Flies out and back: can hit twice."},
     # "stock": sold in packs of 10 chestnuts, each throw uses one chestnut instead of an acorn
     "chestnut": {"name": "Exploding Chestnut", "price": 50, "ammo": 1, "stock": 10,
-        "desc": "Bounces along the ground, then explodes: area damage."},
+        "desc": "Bounces, then explodes: 2 damage to every opponent close by."},
     "pinecone": {"name": "Pinecone Bomb", "price": 80, "ammo": 2,
         "desc": "Slow lob that explodes: area damage."},
     "rainbow": {"name": "Rainbow Beam", "price": 120, "ammo": 3,

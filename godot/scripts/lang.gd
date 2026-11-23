@@ -87,7 +87,7 @@ const FR := {
     "Straight shot. Cheap and reliable.": "Tir droit. Économique et fiable.",
     "Three acorns in a fan.": "Trois glands en éventail.",
     "Flies out and back: can hit twice.": "Va et revient : peut toucher deux fois.",
-    "Bounces along the ground, then explodes: area damage.": "Rebondit au sol puis explose : dégâts de zone.",
+    "Bounces, then explodes: 2 damage to every opponent close by.": "Rebondit puis explose : 2 dégâts à tous les ennemis proches.",
     "Sold in packs of %d; press D to throw one (no acorn needed).": "Vendue par lot de %d ; touche D pour en lancer une (sans gland).",
     "(%d left)": "(%d restantes)",
     "Slow lob that explodes: area damage.": "Lob lent qui explose : dégâts de zone.",
