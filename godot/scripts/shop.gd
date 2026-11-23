@@ -14,6 +14,15 @@ static func rows(p: Loadout, next_run: int, next_is_boss: bool) -> Array[Diction
     var out: Array[Dictionary] = []
     for id in Weapons.ORDER:
         var d: Dictionary = Weapons.DEFS[id]
+        if d.has("stock"):  # a pack of consumables: always buyable, shows how many are left
+            var left := p.stock_left(id)
+            var pack_name := "%s  x%d" % [Lang.t(d["name"]), d["stock"]]
+            out.append({
+                "id": id, "name": pack_name if left <= 0 else "%s %s" % [pack_name, Lang.t("(%d left)", [left])],
+                "status": Lang.t("%d coins", [d["price"]]),
+                "detail": "%s  %s" % [Lang.t(d["desc"]), Lang.t("Sold in packs of %d; uses no acorns.", [d["stock"]])],
+            })
+            continue
         var status: String
         if p.equipped == id:
             status = Lang.t("EQUIPPED")
@@ -66,6 +75,9 @@ static func activate(p: Loadout, id: String) -> String:
             return Lang.t("Pouch is already at maximum.")
         return Lang.t("Pouch upgraded!") if p.buy_ammo_upgrade() else Lang.t("Not enough coins.")
     var wname: String = Lang.t(Weapons.DEFS[id]["name"])
+    if Weapons.DEFS[id].has("stock"):  # buy another pack
+        var bought := "%s x%d" % [wname, Weapons.DEFS[id]["stock"]]
+        return Lang.t("Bought %s!", [bought]) if p.buy_weapon(id) else Lang.t("Not enough coins.")
     if p.owns(id):
         p.equip(id)
         return Lang.t("%s equipped.", [wname])

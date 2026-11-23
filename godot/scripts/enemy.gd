@@ -93,6 +93,12 @@ const KINDS := {
         "frames": ["bee1.png", "bee2.png"],
         "interval": 0.08, "random_frames": false, "forward": -1.6, "fall_vx": -2.5,
         "ai": "wave", "wave_amp": 50.0, "wave_freq": 7.0,
+        # A cartoon bumblebee (licensed art, local-only like the boar - see CREDITS.md)
+        # replaces the little synthesized bee when its files are present.
+        "private": {
+            "frames": ["res://private/bee_1.png", "res://private/bee_2.png", "res://private/bee_3.png", "res://private/bee_4.png"],
+            "w": 62.0, "h": 38.0, "hit": Rect2(0.15, 0.18, 0.74, 0.72), "interval": 0.07,
+        },
     },
     # Bosses: big versions of ordinary sprites. They walk in, stand and spit
     # fire, then blink red and charge across the screen - jump over (or onto) them.

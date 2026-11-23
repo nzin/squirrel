@@ -5,7 +5,7 @@ extends Entity
 ## Game._update_shots; the shot itself only moves and draws.
 ##   acorn      straight, consumed on hit (also used by the triple-acorn fan)
 ##   boomerang  flies out, returns; pierces, each enemy hit once per leg
-##   chestnut   arcs and bounces along the ground
+##   chestnut   arcs, bounces along the ground, explodes on contact or its 3rd bounce
 ##   pinecone   slow lob; detonates on contact/ground, area damage
 ##   rainbow    fast pierce, 2 damage
 ##   homing     steers toward the nearest enemy ahead
@@ -15,6 +15,16 @@ const CAP := Color8(101, 67, 33)
 const RAINBOW := [Color8(230, 40, 40), Color8(250, 140, 30), Color8(250, 220, 40),
     Color8(60, 190, 70), Color8(50, 120, 230), Color8(150, 70, 200)]
 const BLAST_TICKS := 14
+const CHESTNUT_BOUNCES := 3       # it explodes on the third bounce
+const CHESTNUT_BLAST_TICKS := 22  # a longer explosion: it plays a 9-frame animation
+## Optional licensed explosion frames, kept out of the public repo (godot/private/,
+## see CREDITS.md). Without them the chestnut explodes with the plain orange burst.
+const EXPLOSION_FRAMES := ["res://private/explosion_1.png", "res://private/explosion_2.png", "res://private/explosion_3.png",
+    "res://private/explosion_4.png", "res://private/explosion_5.png", "res://private/explosion_6.png",
+    "res://private/explosion_7.png", "res://private/explosion_8.png", "res://private/explosion_9.png"]
+const EXPLOSION_SIZE_PER_RADIUS := 3.4  # drawn size of a frame = blast radius x this
+static var _explosion_art: Array[Texture2D] = []
+static var _explosion_checked := false
 const BOOMERANG_RANGE := 320.0
 const HOMING_SPEED := 8.0
 
@@ -35,6 +45,8 @@ var exploding := false
 var exploded := false
 var blast_age := 0.0
 var blast_radius := 0.0
+var blast_ticks := float(BLAST_TICKS)
+var bounce_count := 0
 
 
 ## `px, py`: where the shot leaves the squirrel (front, vertical middle).
@@ -63,6 +75,8 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             vx = 7.0
             vy = -5.0
             gravity = 0.45
+            blast_radius = 75.0  # the explosion hurts everything close by (1 damage each)
+            blast_ticks = float(CHESTNUT_BLAST_TICKS) if not explosion_art().is_empty() else float(BLAST_TICKS)
         "pinecone":
             w = 22.0
             h = 28.0
@@ -86,6 +100,20 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
     origin_x = x
 
 
+## The optional explosion animation frames, or [] when the local art is absent.
+static func explosion_art() -> Array[Texture2D]:
+    if not _explosion_checked:
+        _explosion_checked = true
+        var frames: Array[Texture2D] = []
+        for f: String in EXPLOSION_FRAMES:
+            if not ResourceLoader.exists(f):
+                frames.clear()
+                break
+            frames.append(load(f))
+        _explosion_art = frames
+    return _explosion_art
+
+
 func detonate() -> void:
     if exploding:
         return
@@ -103,7 +131,7 @@ func update(sq: Squirrel, enemies: Array) -> void:
     var ts := Cfg.time_scale
     if exploding:
         blast_age += ts
-        if blast_age > BLAST_TICKS:
+        if blast_age > blast_ticks:
             active = false
         queue_redraw()
         return
@@ -128,8 +156,12 @@ func update(sq: Squirrel, enemies: Array) -> void:
         if kind == "pinecone":
             detonate()
         else:
-            vy = -7.0  # chestnut bounces
+            bounce_count += 1
             bounced = true
+            if bounce_count >= CHESTNUT_BOUNCES:
+                detonate()  # ...and blows up on the third bounce
+            else:
+                vy = -7.0
 
     if returning and x <= sq.x + sq.w:
         active = false
@@ -157,12 +189,41 @@ func _steer(enemies: Array) -> void:
     vy = v.y
 
 
+## The built-in cartoon explosion (used by the pinecone, and by the chestnut when the
+## licensed animation frames are absent): a shockwave ring, spikes, a layered fireball
+## and rising smoke.
+func _draw_plain_explosion(c: Vector2, t: float) -> void:
+    var grow := 1.0 - pow(1.0 - t, 3.0)
+    var r := blast_radius * (0.3 + 0.7 * grow)
+    var a := 1.0 if t < 0.55 else 1.0 - (t - 0.55) / 0.45
+    draw_arc(c, blast_radius * (0.4 + 0.9 * grow), 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.75 * (1.0 - t)), 3.0)
+    for i in 12:  # spiky rays
+        var dir := Vector2.from_angle(TAU * i / 12.0 + 0.2)
+        var tip := r * (1.0 + (0.45 if i % 2 == 0 else 0.2))
+        draw_line(c + dir * r * 0.55, c + dir * tip, Color(1.0, 0.85, 0.25, a), 5.0 * (1.0 - t) + 1.0)
+    if t > 0.35:  # smoke
+        for i in 4:
+            var off := Vector2.from_angle(TAU * i / 4.0 + 0.6) * r * 0.6 + Vector2(0.0, -r * 0.5 * (t - 0.35))
+            draw_circle(c + off, r * 0.32, Color(0.22, 0.2, 0.2, 0.55 * (1.0 - t)))
+    draw_circle(c, r, Color(0.85, 0.2, 0.05, 0.9 * a))
+    draw_circle(c, r * 0.78, Color(1.0, 0.5, 0.1, a))
+    draw_circle(c, r * 0.5, Color(1.0, 0.85, 0.3, a))
+    draw_circle(c, r * 0.24 * (1.0 - 0.5 * t), Color(1.0, 1.0, 0.9, a))
+
+
 func _draw() -> void:
     var c := Vector2(w / 2.0, h / 2.0)
     if exploding:
-        var t := float(blast_age) / BLAST_TICKS
-        draw_circle(c, blast_radius * (0.25 + 0.75 * t), Color(1.0, 0.55, 0.1, 0.6 * (1.0 - t)))
-        draw_circle(c, blast_radius * 0.5 * t, Color(1.0, 0.9, 0.4, 0.8 * (1.0 - t)))
+        var t := clampf(blast_age / blast_ticks, 0.0, 1.0)
+        var art: Array[Texture2D] = []
+        if kind == "chestnut":
+            art = explosion_art()
+        if not art.is_empty():  # the cartoon explosion animation
+            var tex: Texture2D = art[mini(art.size() - 1, int(t * art.size()))]
+            var side := blast_radius * EXPLOSION_SIZE_PER_RADIUS
+            draw_texture_rect(tex, Rect2(c - Vector2(side, side) / 2.0, Vector2(side, side)), false)
+            return
+        _draw_plain_explosion(c, t)
         return
     match kind:
         "acorn":
