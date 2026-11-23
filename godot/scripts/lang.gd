@@ -30,8 +30,10 @@ const FR := {
     "Show Controls": "Voir les commandes",
     "Quit": "Quitter",
     "Language: %s": "Langue : %s",
+    "Music: %d%%": "Musique : %d %%",
+    "Effects: %d%%": "Effets : %d %%",
     "Use UP/DOWN to navigate, ENTER/SPACE to select": "HAUT/BAS pour naviguer, ENTRÉE/ESPACE pour choisir",
-    "LEFT/RIGHT changes the language": "GAUCHE/DROITE change la langue",
+    "LEFT/RIGHT changes the language and volume": "GAUCHE/DROITE change la langue et le volume",
     # controls
     "Controls": "Commandes",
     "SPACE - Jump": "ESPACE - Sauter",

@@ -214,7 +214,7 @@ func _rebuild_menu(st: Dictionary) -> void:
             menu_root.add_child(_centered(Lang.t("GAME OVER"), 64, Color.RED, 120))
             menu_root.add_child(_centered(Lang.t("Reached run %d", [st["run"]]), 28, GOLD, 185))
             menu_root.add_child(_centered(Lang.t("Final Score: %d   (Best: %d)", [st["score"], st["best"]]), 28, Color.WHITE, 222))
-            _menu_items(st, 290.0)
+            _menu_items(st, 272.0)
         "pause":
             menu_root.add_child(_centered(Lang.t("PAUSED"), 58, Color.WHITE, 100))
             _menu_items(st, 190.0)
@@ -232,14 +232,17 @@ func _rebuild_menu(st: Dictionary) -> void:
 
 func _menu_items(st: Dictionary, start_y: float) -> void:
     var items: Array = st["menu_items"]
+    # the more entries, the tighter and smaller they get, so they always fit above the hints
+    var gap := minf(58.0, (486.0 - start_y) / maxf(1.0, items.size() - 1.0))
+    var fsize := 44 if gap >= 56.0 else (40 if gap >= 50.0 else 36)
     for i in items.size():
         var color := Color.YELLOW if i == st["selection"] else Color.WHITE
-        var y := start_y + i * 58.0
-        menu_root.add_child(_centered(items[i], 44, color, y))
+        var y := start_y + i * gap
+        menu_root.add_child(_centered(items[i], fsize, color, y))
         if i == st["selection"]:
-            menu_root.add_child(_centered(">", 44, Color.YELLOW, y, Cfg.SCREEN_W / 2.0 - 250.0))
+            menu_root.add_child(_centered(">", fsize, Color.YELLOW, y, Cfg.SCREEN_W / 2.0 - 250.0))
     menu_root.add_child(_centered(Lang.t("Use UP/DOWN to navigate, ENTER/SPACE to select"), 22, GREY, Cfg.SCREEN_H - 62))
-    menu_root.add_child(_centered(Lang.t("LEFT/RIGHT changes the language"), 20, GREY, Cfg.SCREEN_H - 34))
+    menu_root.add_child(_centered(Lang.t("LEFT/RIGHT changes the language and volume"), 20, GREY, Cfg.SCREEN_H - 34))
 
 
 const SHELF_W := 584.0                     # the wares' shelf takes most of the screen...

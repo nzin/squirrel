@@ -60,6 +60,16 @@ Beaver, croco, fox and owl can carry a **frontal shield** - protected enemies on
 - Projectiles kill on any contact; shoot them down with any weapon. Bosses spit fireballs while they stand.
 - Nobody shoots before run 3.
 
+## Sound
+
+The music is an original **arcade fighting-game soundtrack** (FM slap bass, FM piano and brass, a gritty saw lead, distorted power chords, gated-reverb drums, in a tense minor key), synthesized by `tools/make_arcade_music.py`. The effects are synthesized by `tools/make_sounds.py`, except 17 (impacts, coins, bell, interface clicks) from Kenney's CC0 packs, see `CREDITS.md`. Both run with `make sounds`; the files live in `godot/assets/audio/` (about 2 MB once compressed in the game). `scripts/audio_hub.gd` plays them:
+
+- **Music** follows the situation and crossfades: a first theme (runs 1-2, 144 BPM), the same theme with more layers (3-5) and a faster, double-kick version (6+, 158 BPM), a dark boss track (160 BPM) with tom-roll fills, a funky "bonus stage" groove for the dwarf's shop, a KO fanfare for bosses, a round-win fanfare, and a tense "continue?" sting at game over.
+- **Matrix Fist**: while time slows the music drops in pitch and is muffled, then winds back up.
+- **Effects**: every weapon has its own throw sound; hits, shields, coins, boxes, enemy warnings (charge, dive, pounce, shots), the dwarf's mumbling voice, menus and the fist's whoom, dash, thud and rewind.
+- **Volumes**: *Music* and *Effects* in the pause and game-over menus (LEFT/RIGHT, or ENTER to cycle); saved with your profile.
+- **Replacing a sound**: drop a `.wav` or `.ogg` with the same name into `assets/audio/sfx/` or `music/` (names are in `audio_hub.gd` and the `tools/make_sounds.py` tables). Missing files are skipped silently. Note: browsers only start audio after the first key press.
+
 ## Art
 
 The four newest opponents (hedgehog, fox, owl, bee) and the dwarf shopkeeper are original artwork drawn by `tools/make_sprites.py` (`make sprites`). See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.

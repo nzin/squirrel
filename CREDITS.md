@@ -3,6 +3,40 @@
 Keep this file up to date: every image in `godot/assets/` must have a line here
 with where it came from and under what licence it may be used.
 
+## Sound
+
+**The music and fanfares are ours**: an arcade fighting-game soundtrack synthesized from scratch by
+[`tools/make_arcade_music.py`](tools/make_arcade_music.py) (pure Python): no licence issue.
+**Most effects are ours too**, synthesized by [`tools/make_sounds.py`](tools/make_sounds.py).
+`make sounds` regenerates both.
+
+**17 effects are from [Kenney](https://kenney.nl)** (Creative Commons Zero, CC0 - no
+attribution required, but thank you!). They are `.ogg` files in `godot/assets/audio/sfx/`
+that take priority over the synthesized `.wav` of the same name:
+
+| Game sound | Kenney pack | Original file |
+|---|---|---|
+| `hit` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) | `impactPunch_medium_001` |
+| `fist_hit` | Impact Sounds | `impactPunch_heavy_001` |
+| `shield_clang` | Impact Sounds | `impactMetal_heavy_001` |
+| `box_bump` | Impact Sounds | `impactWood_medium_001` |
+| `land` | Impact Sounds | `impactSoft_medium_001` |
+| `splat` | Impact Sounds | `impactSoft_heavy_001` |
+| `smash` | Impact Sounds | `impactPlank_medium_001` |
+| `stomp` | Impact Sounds | `impactWood_heavy_000` |
+| `mole_pop` | Impact Sounds | `impactMining_001` |
+| `shop_bell` | Impact Sounds | `impactBell_heavy_000` |
+| `coin` | [RPG Audio](https://kenney.nl/assets/rpg-audio) | `handleCoins2` |
+| `buy` | RPG Audio | `handleCoins` |
+| `ui_move` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | `tick_001` |
+| `ui_select` | Interface Sounds | `confirmation_001` |
+| `ui_back` | Interface Sounds | `close_001` |
+| `pause` | Interface Sounds | `open_001` |
+| `no_money` | Interface Sounds | `error_001` |
+
+To swap any other sound for a better file, drop a file with the same name into the
+folder and add a row here. CC0 / CC-BY music would be fine too (CC-BY needs attribution).
+
 ## Original artwork (ours - no licence issue)
 
 Drawn in code by [`tools/make_sprites.py`](tools/make_sprites.py) (`make sprites`):

@@ -854,6 +854,156 @@ func _initialize() -> void:
         check(bb.rect().size.y <= 125.0 and bb.hp >= 10, "boss %s (tier %d) is jumpable (%.0f px tall) and tough (%d hp)" % [bb.kind, tier, bb.rect().size.y, bb.hp])
     check(boss_kinds == ["boss_beaver", "boss_boar", "boss_skunk", "boss_beaver", "boss_boar", "boss_skunk"], "bosses cycle beaver, boar, skunk %s" % [boss_kinds])
 
+
+    print("sound")
+    var a: AudioHub = game.audio
+    var missing: Array[String] = []
+    for nm in ["jump", "land", "throw_acorn", "throw_spread", "throw_boomerang", "throw_chestnut", "throw_pinecone", "throw_rainbow", "throw_homing",
+            "boom", "hit", "enemy_defeat", "coin", "rainbow_collect", "box_bump", "shield_clang", "warn", "whoosh", "stomp", "dive", "pounce", "roll",
+            "hiss", "fireball", "splat", "mole_pop", "boss_roar", "life_lost", "respawn", "shop_bell", "buy", "no_money", "ui_move", "ui_select",
+            "ui_back", "pause", "fist_start", "fist_dash", "fist_hit", "fist_turn", "fist_end", "fade", "smash", "dwarf_blip", "dwarf_laugh", "oneup",
+            "run_complete"]:
+        if a._load_stream(AudioHub.SFX_DIR, nm) == null:
+            missing.append(nm)
+    for nm in ["run_a", "run_b", "run_c", "boss", "shop", "game_over", "boss_defeated"]:
+        if a._load_stream(AudioHub.MUSIC_DIR, nm) == null:
+            missing.append("music/" + nm)
+    check(missing.is_empty(), "every effect and music track has a sound file %s" % [missing])
+    var kenney: Array[String] = []
+    for nm in ["hit", "fist_hit", "shield_clang", "box_bump", "land", "splat", "smash", "stomp", "mole_pop", "shop_bell",
+            "coin", "buy", "ui_move", "ui_select", "ui_back", "pause", "no_money"]:
+        if not (a._load_stream(AudioHub.SFX_DIR, nm) is AudioStreamOggVorbis):
+            kenney.append(nm)
+    check(kenney.is_empty(), "the 17 downloaded CC0 sounds take priority over the synthesized ones %s" % [kenney])
+    check(a._load_stream(AudioHub.SFX_DIR, "jump") is AudioStreamWAV, "...the rest stay synthesized")
+    var loop: AudioStreamWAV = a._load_stream(AudioHub.MUSIC_DIR, "run_a")
+    check(loop.loop_mode == AudioStreamWAV.LOOP_FORWARD and loop.loop_end > loop.mix_rate * 10, "music tracks loop (%.1f s)" % loop.get_length())
+    var once: AudioStreamWAV = a._load_stream(AudioHub.MUSIC_DIR, "game_over")
+    check(once.loop_mode == AudioStreamWAV.LOOP_DISABLED, "jingles do not loop")
+
+    game.new_game()
+    _quiet(game)
+    game.frame(dt)
+    check(a.current_music == "run_a", "runs 1-2 play the first run theme")
+    game.run = 3
+    game.start_run()
+    game.frame(dt)
+    check(a.current_music == "run_b", "runs 3-5: the same theme with more layers")
+    game.run = 6
+    game.start_run()
+    game.frame(dt)
+    check(a.current_music == "run_c", "run 6+: the tense version")
+    _quiet(game)
+    game.run = 3
+    game.start_run()
+    _quiet(game)
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    game.frame(dt)
+    check(a.current_music == "boss" and a.heard("boss_roar"), "the boss brings its own music and a roar")
+    game._damage_enemy(game.boss, 999)
+    game.frame(dt)
+    game.frame(dt)
+    check(a.heard("boss_defeated") and a.current_music == "", "boss defeated: fanfare, music pauses")
+    game._enter_shop()
+    game.frame(dt)
+    check(a.current_music == "shop" and a.heard("shop_bell"), "the shop has its tavern waltz and a bell")
+
+    game.new_game()
+    _quiet(game)
+    a.played.clear()
+    game.do_jump()
+    check(a.heard("jump"), "jumping squeaks")
+    for i in 80:
+        game.frame(dt)
+    check(a.heard("land"), "landing thuds")
+    for wid in ["acorn", "spread", "boomerang", "chestnut", "pinecone", "rainbow", "homing"]:
+        game.weapon = wid
+        game.acorns = 9
+        a.played.clear()
+        game.do_throw()
+        check(a.heard("throw_" + wid), "weapon %s has its own throw sound" % wid)
+    a.played.clear()
+    var snd_skunk := Enemy.create("skunk", 400.0, 430.0)
+    game.layers["ground"].add_child(snd_skunk)
+    game.enemies.append(snd_skunk)
+    game._damage_enemy(snd_skunk, 5)
+    check(a.heard("enemy_defeat") and a.heard("coin"), "defeating an enemy pops and pays")
+    a.played.clear()
+    var snd_charger := Enemy.create("beaver", 500.0, 420.0)
+    game.layers["ground"].add_child(snd_charger)
+    game.enemies.append(snd_charger)
+    for i in 200:
+        game.frame(dt)
+        if a.heard("warn"):
+            break
+    check(a.heard("warn"), "a telegraphing enemy gives an audible warning")
+    game.new_game()
+    _quiet(game)
+    a.played.clear()
+    game.loadout.fists = 1
+    game.use_fist()
+    check(a.heard("fist_start") and a.heard("fist_dash"), "the Matrix Fist starts with a deep whoom and a dash")
+    var lowest_pitch := 1.0
+    var muffled := 20500.0
+    for i in 80:
+        game.frame(dt)
+        lowest_pitch = minf(lowest_pitch, a._music[a._active_music].pitch_scale)
+        muffled = minf(muffled, a._lowpass.cutoff_hz)
+    check(lowest_pitch < 0.8 and muffled < 3000.0, "in slow motion the music drops in pitch (%.2f) and is muffled (%.0f Hz)" % [lowest_pitch, muffled])
+    for i in 330:
+        game.frame(dt)
+    check(a.heard("fist_turn") and a.heard("fist_end") and absf(a._music[a._active_music].pitch_scale - 1.0) < 0.01, "turnaround boom, rewind whoosh, and the music is back to normal")
+    game.new_game()
+    a.played.clear()
+    game.pause()
+    check(a.heard("pause"), "pausing has a sound")
+    game.frame(dt)
+    check(a._lowpass.cutoff_hz <= 900.0, "the music is muffled while paused")
+    game.resume()
+    game.new_game()
+    game.loadout.coins = 100
+    game._enter_shop()
+    a.played.clear()
+    game.shop_selection = 1
+    game._menu_input(enter)
+    check(a.heard("buy") and a.heard("dwarf_laugh"), "buying: ka-ching and the dwarf laughs")
+    a.played.clear()
+    game.loadout.coins = 0
+    game.shop_selection = 6
+    game._menu_input(enter)
+    check(a.heard("no_money"), "can't afford it: a buzzer")
+    a.played.clear()
+    var snd_down := InputEventAction.new()
+    snd_down.action = "ui_down"
+    snd_down.pressed = true
+    game._menu_input(snd_down)
+    check(a.heard("ui_move") and a._speak_left > 0, "browsing ticks, and the dwarf mumbles his description")
+
+    print("sound volumes")
+    game.new_game()
+    var vol0: float = game.profile.music_volume
+    game.change_volume("music", -0.1)
+    check(is_equal_approx(game.profile.music_volume, vol0 - 0.1) and is_equal_approx(a.music_volume, vol0 - 0.1), "music volume changes")
+    game.change_volume("sfx", 0.3, true)
+    check(game.profile.sfx_volume <= 1.0, "effects volume stays in range")
+    game.profile.set_music_volume(0.0)
+    game.change_volume("music", 0.1, true)
+    game.change_volume("music", 1.0, true)
+    check(game.profile.music_volume == 0.0, "past 100 % a volume wraps to 0 (so ENTER alone cycles it)")
+    var vids: Array = game.menu_items().map(func(i: Dictionary) -> String: return i["id"])
+    check(vids.has("music") and vids.has("sfx"), "the menu has Music and Effects entries")
+    check(Lang.t("Music: %d%%", [70]) == "Music: 70%", "...formatted")
+    game.profile.set_music_volume(0.4)
+    game.profile.set_sfx_volume(0.5)
+    var vreload := Profile.new()
+    vreload.load_from_disk()
+    check(is_equal_approx(vreload.music_volume, 0.4) and is_equal_approx(vreload.sfx_volume, 0.5), "volumes are saved")
+    game.profile.set_music_volume(0.7)
+    game.profile.set_sfx_volume(0.8)
+    a.set_music_volume(0.7)
+    a.set_sfx_volume(0.8)
+
     print("pause menu (ESC)")
     game.new_game()
     _quiet(game)

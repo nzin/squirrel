@@ -199,6 +199,7 @@ var shoot_kind := ""
 var shoot_cd := 0.0
 var shoot_telegraph := 0.0
 var pending_shot := ""     # kind of projectile Game should create this tick
+var pending_sound := ""    # sound cue for Game to play ("warn", "stomp", "dive"...)
 var _blink := Color.WHITE  # WHITE = not blinking
 
 
@@ -306,6 +307,13 @@ func hit(damage := 1) -> bool:
     return false
 
 
+## The sound cue to play this tick ("" = none); clears the request.
+func take_sound() -> String:
+    var s := pending_sound
+    pending_sound = ""
+    return s
+
+
 ## The projectile kind to fire this tick ("" = none); clears the request.
 func take_shot() -> String:
     var s := pending_shot
@@ -384,12 +392,14 @@ func _update_charger(scroll_speed: float, delta: float, target: Rect2) -> void:
             if target.size != Vector2.ZERO and _gap_to(target) < CHARGE_TRIGGER and _gap_to(target) > 0.0:
                 ai_state = "telegraph"
                 ai_timer = 0.0
+                pending_sound = "warn"
         "telegraph":  # plants its feet: only the world moves it
             x -= scroll_speed
             ai_timer += delta
             _blink = BLINK_RED if int(ai_timer * 14.0) % 2 == 0 else Color.WHITE
             if ai_timer >= TELEGRAPH:
                 ai_state = "go"
+                pending_sound = "stomp"
         "go":
             x -= scroll_speed + CHARGE_SPEED * speed_mult * Cfg.time_scale
     if x + w < 0.0:
@@ -406,6 +416,7 @@ func _update_diver(scroll_speed: float, delta: float, target: Rect2) -> void:
             if target.size != Vector2.ZERO and _gap_to(target) < DIVE_TRIGGER:
                 ai_state = "telegraph"
                 ai_timer = 0.0
+                pending_sound = "warn"
         "telegraph":
             x -= scroll_speed * 0.5
             ai_timer += delta
@@ -416,6 +427,7 @@ func _update_diver(scroll_speed: float, delta: float, target: Rect2) -> void:
                 vx = dir.x * DIVE_SPEED * speed_mult
                 vy = dir.y * DIVE_SPEED * speed_mult
                 ai_state = "go"
+                pending_sound = "dive"
         "go":
             x += vx * Cfg.time_scale - scroll_speed  # own velocity, carried by the world too
             y += vy * Cfg.time_scale
@@ -434,12 +446,14 @@ func _update_roller(scroll_speed: float, delta: float, target: Rect2) -> void:
             if target.size != Vector2.ZERO and _gap_to(target) < ROLL_TRIGGER and _gap_to(target) > 0.0:
                 ai_state = "telegraph"
                 ai_timer = 0.0
+                pending_sound = "warn"
         "telegraph":  # tucks its head in
             x -= scroll_speed
             ai_timer += delta
             _blink = BLINK_YELLOW if int(ai_timer * 14.0) % 2 == 0 else Color.WHITE
             if ai_timer >= TELEGRAPH:
                 ai_state = "ball"
+                pending_sound = "roll"
                 curled = true
                 _show_frame(2)
                 sprite.centered = true  # spin around its middle
@@ -462,6 +476,7 @@ func _update_pouncer(scroll_speed: float, delta: float, target: Rect2) -> void:
             if ai_state == "cruise" and target.size != Vector2.ZERO and _gap_to(target) < POUNCE_TRIGGER and _gap_to(target) > 0.0:
                 ai_state = "telegraph"
                 ai_timer = 0.0
+                pending_sound = "warn"
         "telegraph":  # crouches
             x -= scroll_speed
             ai_timer += delta
@@ -469,6 +484,7 @@ func _update_pouncer(scroll_speed: float, delta: float, target: Rect2) -> void:
             if ai_timer >= TELEGRAPH * 0.8:
                 ai_state = "air"
                 vy = POUNCE_VY
+                pending_sound = "pounce"
         "air":
             vy += Cfg.GRAVITY * ts
             y += vy * ts
@@ -527,11 +543,13 @@ func _update_boss(scroll_speed: float, delta: float) -> void:
             if boss_timer >= idle_time:
                 boss_state = "warn"
                 boss_timer = 0.0
+                pending_sound = "warn"
         "warn":
             boss_timer += delta
             _blink = BLINK_RED if int(boss_timer * 12.0) % 2 == 0 else Color.WHITE
             if boss_timer >= BOSS_WARN_TIME:
                 boss_state = "charge"
+                pending_sound = "stomp"
         "charge":
             x -= scroll_speed + (BOSS_CHARGE_SPEED * (1.3 if enraged else 1.0)) * ts
             if x + w < 0.0:
@@ -552,6 +570,7 @@ func _update_mole(scroll_speed: float, delta: float, target: Rect2) -> void:
                 mole_timer = 0.0
                 mole_interval = randf_range(3.0, 5.0)
                 _show_frame(1)
+                pending_sound = "mole_pop"
     if mole_timer >= mole_interval:
         underground = not underground
         mole_timer = 0.0
@@ -598,6 +617,7 @@ func _update_shooting(delta: float, target: Rect2) -> void:
     shoot_cd -= delta
     if shoot_cd <= 0.0 and _shot_lined_up(r, target):
         shoot_telegraph = TELEGRAPH
+        pending_sound = "warn"
 
 
 func _shot_lined_up(r: Rect2, target: Rect2) -> bool:
