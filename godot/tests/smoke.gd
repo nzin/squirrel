@@ -154,6 +154,81 @@ func _initialize() -> void:
     check(absf(game.squirrel.y + game.squirrel.h - 300.0) < 1.0, "...but a fall from above still lands on top of a cloud")
     game.new_game()
 
+    print("riding a bird")
+    game.new_game()
+    _quiet(game)
+    game.run = 9  # run 9: birds are able to shoot, so we can check this one does not
+    var ride_bird := Enemy.create("bird", 40.0, 300.0)
+    ride_bird.can_shoot = true
+    ride_bird.shoot_cd = 0.0
+    game.layers["air"].add_child(ride_bird)
+    game.enemies.append(ride_bird)
+    game.squirrel.y = 262.0
+    game.squirrel.velocity_y = 0.0
+    var ride_carried := true
+    var ride_locked_x := -1.0
+    var ride_drift := 0.0
+    var ride_sq_x := -1.0
+    var ride_sq_drift := 0.0
+    for i in 300:
+        game.frame(dt)
+        if game.ridden == ride_bird:
+            if ride_locked_x < 0.0:
+                ride_locked_x = ride_bird.x
+                ride_sq_x = game.squirrel.x
+            ride_drift = maxf(ride_drift, absf(ride_bird.x - ride_locked_x))
+            ride_sq_drift = maxf(ride_sq_drift, absf(game.squirrel.x - ride_sq_x))
+            ride_carried = ride_carried and absf(game.squirrel.y + game.squirrel.h - ride_bird.rect().position.y) < 2.0
+    check(game.ridden == ride_bird and ride_bird.ridden and ride_bird.sprite.flip_h, "landing on a bird makes it carry the squirrel, turned to face right")
+    check(ride_locked_x >= 0.0 and ride_drift < 0.01 and ride_sq_drift < 0.01, "while riding, the bird flies at the speed of the scrolling: no horizontal move on screen (bird %.2f px, squirrel %.2f px)" % [ride_drift, ride_sq_drift])
+    check(ride_carried and game.enemy_shots.is_empty() and not game.squirrel.game_over, "the squirrel stays on the bird (it follows the wave) and the bird never bombs its rider")
+    game.do_jump()
+    for i in 5:
+        game.frame(dt)
+    var ride_x_after := ride_bird.x
+    for i in 30:
+        game.frame(dt)
+    check(game.ridden == null and not ride_bird.ridden and not ride_bird.sprite.flip_h and ride_bird.x < ride_x_after - 20.0, "jumping off: the bird turns back to the left and flies on (x %.0f -> %.0f)" % [ride_x_after, ride_bird.x])
+    # shot while carrying: the squirrel falls instead of floating
+    game.new_game()
+    _quiet(game)
+    var ride_bird2 := Enemy.create("bird", 40.0, 300.0)
+    game.layers["air"].add_child(ride_bird2)
+    game.enemies.append(ride_bird2)
+    game.squirrel.y = 262.0
+    for i in 120:
+        game.frame(dt)
+    var ride_was: bool = game.ridden == ride_bird2
+    ride_bird2.hit(5)
+    for i in 80:
+        game.frame(dt)
+    check(ride_was and game.ridden == null and absf(game.squirrel.y - game.squirrel.ground_y) < 1.0, "a defeated bird drops its rider to the ground")
+    game.new_game()
+
+    # however the squirrel lands on a bird (its beak or its tail), the ride must start and last
+    var ride_fail := 0
+    var ride_cases := 0
+    for bx in range(60, 420, 6):
+        for by in [330.0, 380.0]:
+            game.new_game()
+            _quiet(game)
+            var rb := Enemy.create("bird", float(bx), by)
+            game.layers["air"].add_child(rb)
+            game.enemies.append(rb)
+            game.do_jump()
+            var landed := false
+            var x0: float = game.squirrel.x
+            for i in 160:
+                game.frame(dt)
+                if game.ridden == rb:
+                    landed = true
+            if not landed:
+                continue  # it never came down on the bird: nothing to ride
+            ride_cases += 1
+            if not (game.ridden == rb and absf(game.squirrel.x - x0) < 0.01):
+                ride_fail += 1
+                print("    ride failed for the bird starting at x=%d y=%d" % [bx, by])
+    check(ride_cases > 5 and ride_fail == 0, "once it lands on a bird, the squirrel keeps riding it (%d of %d cases failed)" % [ride_fail, ride_cases])
     print("standing on a tree")
     game.new_game()
     game.next_box = 1e9
@@ -550,8 +625,13 @@ func _initialize() -> void:
     game.frame(dt)
     game._damage_enemy(game.boss, 999)
     var coins_before: int = game.loadout.coins
-    game.frame(dt)
-    check(game.phase == "run_complete" and game.complete_boss, "defeating the boss completes the run")
+    for i in 110:  # ~1.8 s after the kill the game is still running
+        game.frame(dt)
+    var still_running: bool = game.phase == "run" and game.fade_dir == 0
+    for i in 20:
+        game.frame(dt)
+    check(still_running, "the game keeps running for ~2 s after the boss is defeated")
+    check(game.phase == "run_complete" and game.complete_boss, "...then defeating the boss completes the run")
     check(game.loadout.coins >= coins_before + Game.RUN_BONUS_PER_RUN * 3 and game.score >= 10, "boss pays coins and 10 points")
     check(not Game.is_boss_run(1) and not Game.is_boss_run(2) and Game.is_boss_run(3) and Game.is_boss_run(6), "every 3rd run is a boss run")
 
@@ -1029,7 +1109,8 @@ func _initialize() -> void:
     game.run_time = Game.RUN_SECONDS - 0.01
     game.frame(dt)
     game._damage_enemy(game.boss, 999)
-    game.frame(dt)
+    for i in 130:  # the game runs on for 2 s after the kill
+        game.frame(dt)
     check(game.complete_life and game.loadout.lives == 4 and game.hud.banner.text.contains("+1 life"), "defeating a boss earns a life")
     check(Enemy.KINDS["skunk"]["coins"] >= 3 and Enemy.KINDS["ptero"]["coins"] >= 8 and Enemy.KINDS["croco"]["coins"] > Enemy.KINDS["skunk"]["coins"], "kills pay more, depending on the opponent")
 
@@ -1105,8 +1186,8 @@ func _initialize() -> void:
     game.frame(dt)
     check(a.current_music == "boss" and a.heard("boss_roar"), "the boss brings its own music and a roar")
     game._damage_enemy(game.boss, 999)
-    game.frame(dt)
-    game.frame(dt)
+    for i in 130:
+        game.frame(dt)
     check(a.heard("boss_defeated") and a.current_music == "", "boss defeated: fanfare, music pauses")
     game._enter_shop()
     game.frame(dt)

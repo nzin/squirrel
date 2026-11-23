@@ -193,6 +193,7 @@ var underground := false  # mole only
 var mole_timer := 0.0
 var mole_interval := 0.0
 
+var ridden := false       # bird only: the squirrel is standing on it, so it flies at the speed of the scrolling (stays put on screen)
 var fall_started := false
 var fall_vy := 0.0
 
@@ -297,6 +298,19 @@ func scale_for_run(run_number: int) -> void:
 func _show_frame(i: int) -> void:
     frame_idx = i
     set_sprite(Cfg.tex(cfg["frames"][i]))
+    sprite.flip_h = ridden
+
+
+## The squirrel hops on (or off) this bird: it turns to face right (the art faces left)
+## and its collision box turns with it, so the squirrel stands on what it can see.
+func set_ridden(on: bool) -> void:
+    if on == ridden:
+        return
+    ridden = on
+    var hb: Rect2 = cfg["hit"]
+    hitbox = Rect2(1.0 - hb.end.x, hb.position.y, hb.size.x, hb.size.y) if on else hb
+    if sprite:
+        sprite.flip_h = on
 
 
 ## Can an acorn hurt it / can it hurt the squirrel right now?
@@ -371,7 +385,8 @@ func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
                 _update_walker(scroll_speed, delta)
                 if ai == "wave":
                     y = base_y + cfg.get("wave_amp", WAVE_AMP) * sin(life * cfg.get("wave_freq", WAVE_FREQ))
-        _update_shooting(delta, target)
+        if not ridden:  # a bird doesn't bomb its own rider
+            _update_shooting(delta, target)
     _apply_tint()
     if shielded or shield_flash > 0.0 or (max_hp > 1 and hp < max_hp):
         queue_redraw()
@@ -393,7 +408,10 @@ func _animate(delta: float) -> void:
 func _update_walker(scroll_speed: float, delta: float) -> void:
     prev_x = x
     x -= scroll_speed
-    x += _forward()
+    if ridden:
+        x += scroll_speed  # flies as fast as the world scrolls: it stays where it is on screen, rider on its back
+    else:
+        x += _forward()
     _animate(delta)
     if x + w < 0.0:
         active = false

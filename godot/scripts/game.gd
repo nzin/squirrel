@@ -20,6 +20,7 @@ const FLASH_TIME := 0.22     # the white flash at the start of an explosion
 const FLASH_STRENGTH := 0.65
 const FADE_TIME := 0.45
 const ANNOUNCE_TIME := 2.0
+const BOSS_VICTORY_TIME := 2.0  # the game keeps running this long after the boss falls, before the run ends
 
 # Matrix Fist timeline (real seconds): the attack starts at second 0 - the squirrel
 # dashes out across the whole screen (0-1.5 s) and back (1.5-3 s), punching
@@ -77,6 +78,7 @@ var gap_factor := 1.0          # < 1 = enemies spawn closer together
 var scroll_offset := 0.0
 var boss: Enemy = null
 var boss_spawned := false
+var boss_down_time := -1.0     # seconds since the boss was defeated (-1 = still standing)
 var complete_timer := 0.0
 var complete_bonus := 0
 var complete_boss := false
@@ -141,6 +143,7 @@ var shots: Array[Shot] = []
 var boxes: Array[Box] = []
 var trees: Array[TreeProp] = []
 var enemies: Array[Enemy] = []
+var ridden: Enemy = null       # the bird the squirrel is riding (it keeps its place on screen until the next jump)
 var enemy_shots: Array[EnemyShot] = []
 var ghosts: Array[Ghost] = []
 var punch_fx: Array[PunchFx] = []
@@ -220,6 +223,7 @@ func start_run() -> void:
     scroll_offset = 0.0
     boss = null
     boss_spawned = false
+    boss_down_time = -1.0
     announce_text = ""
     announce_timer = 0.0
     acorns = loadout.acorns_for_next_run()  # kept from the previous run (see Loadout)
@@ -251,6 +255,7 @@ func start_run() -> void:
     _clear(boxes)
     _clear(trees)
     _clear(enemies)
+    ridden = null
     _clear(enemy_shots)
     _clear(ghosts)
     _clear(punch_fx)
@@ -291,7 +296,10 @@ func _advance_run(delta: float) -> void:
         announce_timer -= delta
     if boss_spawned:
         if boss != null and boss.defeated:
-            _complete_run(true)
+            # the world keeps going for a moment so the kill can be enjoyed, then the run ends
+            boss_down_time = maxf(boss_down_time, 0.0) + delta
+            if boss_down_time >= BOSS_VICTORY_TIME:
+                _complete_run(true)
     elif run_time >= RUN_SECONDS:
         if is_boss_run(run):
             _spawn_boss()
@@ -366,6 +374,22 @@ func _update_fade(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- input
+
+## Landing on a bird makes it carry the squirrel (facing right, flying as fast as the world scrolls) until the
+## squirrel jumps (or falls, or the bird is shot); then the bird turns back and flies on.
+func _update_ride(ghosted: bool) -> void:
+    if ridden != null and (ghosted or squirrel.game_over or not ridden.hittable() \
+            or squirrel.velocity_y != 0.0 or not squirrel.stands_on([ridden])):
+        ridden.set_ridden(false)
+        ridden = null
+    if ridden != null or ghosted or squirrel.game_over or squirrel.velocity_y != 0.0:
+        return
+    for e: Enemy in enemies:
+        if e.kind == "bird" and e.hittable() and squirrel.stands_on([e]):
+            ridden = e
+            e.set_ridden(true)
+            return
+
 
 ## One-way platforms the squirrel can stand on: clouds, tree tops and live
 ## opponents (a defeated enemy or a mole underground is not solid).
@@ -830,6 +854,7 @@ func frame(delta: float) -> void:
     # enemies (only the ground and the clouds still hold it)
     var ghosted := _fist_ghosted()
     squirrel.update([] if ghosted else boxes, clouds if ghosted else _platforms())
+    _update_ride(ghosted)
     if _was_jumping and not squirrel.is_jumping and not squirrel.game_over:
         audio.sfx("land")
     _was_jumping = squirrel.is_jumping
@@ -854,7 +879,12 @@ func frame(delta: float) -> void:
             _drop(trees, t)
     for e: Enemy in enemies.duplicate():
         if live:
+            var old_x := e.x
             e.update(sp, gd, squirrel.rect())
+            if e == ridden:  # the rider goes where the bird goes
+                squirrel.x += e.x - old_x
+                squirrel.y = e.rect().position.y - squirrel.h
+                squirrel.sync()
             var fired := e.take_shot()
             if fired != "":
                 _fire_enemy_shot(e, fired)
