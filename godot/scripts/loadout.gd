@@ -7,6 +7,7 @@ var coins := 0
 var owned: Array[String] = ["acorn"]
 var equipped := "acorn"
 var ammo_level := 0  # extra starting acorns bought in the shop
+var stock := {}      # consumable weapons (id -> throws left), bought in packs
 var fists := 0       # Matrix Fist charges in the bag (each use consumes one)
 var lives := Weapons.START_LIVES
 
@@ -16,6 +17,8 @@ func add_coins(n: int) -> void:
 
 
 func owns(id: String) -> bool:
+    if Weapons.DEFS[id].has("stock"):
+        return int(stock.get(id, 0)) > 0
     return owned.has(id)
 
 
@@ -24,15 +27,28 @@ func equip(id: String) -> void:
         equipped = id
 
 
-## Buy and equip a weapon. False when already owned or too expensive.
+## Buy and equip a weapon. False when too expensive or (for a permanent weapon)
+## already owned. A weapon with a "stock" is sold in packs: buying again adds more.
 func buy_weapon(id: String) -> bool:
-    var price: int = Weapons.DEFS[id]["price"]
-    if owns(id) or coins < price:
+    var def: Dictionary = Weapons.DEFS[id]
+    var price: int = def["price"]
+    if coins < price:
+        return false
+    if def.has("stock"):
+        coins -= price
+        stock[id] = int(stock.get(id, 0)) + int(def["stock"])
+        return true
+    if owns(id):
         return false
     coins -= price
     owned.append(id)
     equipped = id
     return true
+
+
+## Throws left of a consumable weapon (-1 for a permanent one).
+func stock_left(id: String) -> int:
+    return int(stock.get(id, 0)) if Weapons.DEFS[id].has("stock") else -1
 
 
 ## Price of the next "+1 starting acorn" level, or -1 when maxed out.

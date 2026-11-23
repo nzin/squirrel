@@ -5,7 +5,7 @@ extends Entity
 ## Game._update_shots; the shot itself only moves and draws.
 ##   acorn      straight, consumed on hit (also used by the triple-acorn fan)
 ##   boomerang  flies out, returns; pierces, each enemy hit once per leg
-##   chestnut   arcs and bounces along the ground
+##   chestnut   arcs, bounces along the ground, explodes on contact or its 3rd bounce
 ##   pinecone   slow lob; detonates on contact/ground, area damage
 ##   rainbow    fast pierce, 2 damage
 ##   homing     steers toward the nearest enemy ahead
@@ -15,6 +15,34 @@ const CAP := Color8(101, 67, 33)
 const RAINBOW := [Color8(230, 40, 40), Color8(250, 140, 30), Color8(250, 220, 40),
     Color8(60, 190, 70), Color8(50, 120, 230), Color8(150, 70, 200)]
 const BLAST_TICKS := 14
+const CHESTNUT_BOUNCES := 3       # it explodes on the third bounce
+const CHESTNUT_BLAST_TICKS := 22  # a longer explosion: it plays a 9-frame animation
+## Optional licensed explosion frames, kept out of the public repo (godot/private/,
+## see CREDITS.md). Without them the chestnut explodes with the plain orange burst.
+const EXPLOSION_FRAMES := ["res://private/explosion_1.png", "res://private/explosion_2.png", "res://private/explosion_3.png",
+    "res://private/explosion_4.png", "res://private/explosion_5.png", "res://private/explosion_6.png",
+    "res://private/explosion_7.png", "res://private/explosion_8.png", "res://private/explosion_9.png"]
+const EXPLOSION_SIZE_PER_RADIUS := 3.4  # drawn size of a frame = blast radius x this
+## The pinecone's explosion (and the chestnut's when its own frames are missing): a 10-frame
+## mushroom cloud, also licensed and local-only.
+const MUSHROOM_FRAMES := ["res://private/mushroom_1.png", "res://private/mushroom_2.png", "res://private/mushroom_3.png",
+    "res://private/mushroom_4.png", "res://private/mushroom_5.png", "res://private/mushroom_6.png",
+    "res://private/mushroom_7.png", "res://private/mushroom_8.png", "res://private/mushroom_9.png",
+    "res://private/mushroom_10.png"]
+const MUSHROOM_BLAST_TICKS := 26
+const MUSHROOM_SIZE_PER_RADIUS := 3.2  # drawn width of a frame = blast radius x this
+## The pinecone's explosion when it LANDS: a 9-frame burst that spreads along the ground.
+const GROUND_FRAMES := ["res://private/groundburst_1.png", "res://private/groundburst_2.png", "res://private/groundburst_3.png",
+    "res://private/groundburst_4.png", "res://private/groundburst_5.png", "res://private/groundburst_6.png",
+    "res://private/groundburst_7.png", "res://private/groundburst_8.png", "res://private/groundburst_9.png"]
+const GROUND_BLAST_TICKS := 24
+const GROUND_SIZE_PER_RADIUS := 3.8
+static var _ground_art: Array[Texture2D] = []
+static var _ground_checked := false
+static var _mushroom_art: Array[Texture2D] = []
+static var _mushroom_checked := false
+static var _explosion_art: Array[Texture2D] = []
+static var _explosion_checked := false
 const BOOMERANG_RANGE := 320.0
 const HOMING_SPEED := 8.0
 
@@ -35,6 +63,9 @@ var exploding := false
 var exploded := false
 var blast_age := 0.0
 var blast_radius := 0.0
+var blast_ticks := float(BLAST_TICKS)
+var burst := "ring"  # which explosion animation plays: chestnut | ground | mushroom | ring
+var bounce_count := 0
 
 
 ## `px, py`: where the shot leaves the squirrel (front, vertical middle).
@@ -63,6 +94,7 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             vx = 7.0
             vy = -5.0
             gravity = 0.45
+            blast_radius = 75.0  # the explosion hurts everything close by (1 damage each)
         "pinecone":
             w = 22.0
             h = 28.0
@@ -82,15 +114,85 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             w = 15.0
             h = 20.0
             vx = HOMING_SPEED
+    if blast_radius > 0.0:  # an explosive: its blast lasts as long as its animation
+        blast_ticks = _ticks_for(_choose_burst(false))
     place(px, py + 10.0 - h / 2.0)  # a 20 px acorn keeps its original spawn point
     origin_x = x
 
 
-func detonate() -> void:
+## The optional ground-burst frames, or [] when the local art is absent.
+static func ground_art() -> Array[Texture2D]:
+    if not _ground_checked:
+        _ground_checked = true
+        var frames: Array[Texture2D] = []
+        for f: String in GROUND_FRAMES:
+            if not ResourceLoader.exists(f):
+                frames.clear()
+                break
+            frames.append(load(f))
+        _ground_art = frames
+    return _ground_art
+
+
+## The optional mushroom-cloud frames, or [] when the local art is absent.
+static func mushroom_art() -> Array[Texture2D]:
+    if not _mushroom_checked:
+        _mushroom_checked = true
+        var frames: Array[Texture2D] = []
+        for f: String in MUSHROOM_FRAMES:
+            if not ResourceLoader.exists(f):
+                frames.clear()
+                break
+            frames.append(load(f))
+        _mushroom_art = frames
+    return _mushroom_art
+
+
+## The optional explosion animation frames, or [] when the local art is absent.
+static func explosion_art() -> Array[Texture2D]:
+    if not _explosion_checked:
+        _explosion_checked = true
+        var frames: Array[Texture2D] = []
+        for f: String in EXPLOSION_FRAMES:
+            if not ResourceLoader.exists(f):
+                frames.clear()
+                break
+            frames.append(load(f))
+        _explosion_art = frames
+    return _explosion_art
+
+
+## Which animation an explosion plays: the chestnut has its own; otherwise a blast on
+## the ground spreads along it, and one in the air (a hit) is a rising mushroom cloud.
+## Without any installed art it is just a ring.
+func _choose_burst(on_ground: bool) -> String:
+    if kind == "chestnut" and not explosion_art().is_empty():
+        return "chestnut"
+    if on_ground and not ground_art().is_empty():
+        return "ground"
+    if not mushroom_art().is_empty():
+        return "mushroom"
+    return "ring"
+
+
+func _ticks_for(style: String) -> float:
+    match style:
+        "chestnut":
+            return float(CHESTNUT_BLAST_TICKS)
+        "ground":
+            return float(GROUND_BLAST_TICKS)
+        "mushroom":
+            return float(MUSHROOM_BLAST_TICKS)
+    return float(BLAST_TICKS)
+
+
+func detonate(on_ground := false) -> void:
     if exploding:
         return
     exploding = true
     blast_age = 0
+    burst = _choose_burst(on_ground)
+    blast_ticks = _ticks_for(burst)
     queue_redraw()
 
 
@@ -103,7 +205,7 @@ func update(sq: Squirrel, enemies: Array) -> void:
     var ts := Cfg.time_scale
     if exploding:
         blast_age += ts
-        if blast_age > BLAST_TICKS:
+        if blast_age > blast_ticks:
             active = false
         queue_redraw()
         return
@@ -126,10 +228,14 @@ func update(sq: Squirrel, enemies: Array) -> void:
     if gravity > 0.0 and y + h >= Cfg.SOIL_Y:
         y = Cfg.SOIL_Y - h
         if kind == "pinecone":
-            detonate()
+            detonate(true)
         else:
-            vy = -7.0  # chestnut bounces
+            bounce_count += 1
             bounced = true
+            if bounce_count >= CHESTNUT_BOUNCES:
+                detonate(true)  # ...and blows up on the third bounce
+            else:
+                vy = -7.0
 
     if returning and x <= sq.x + sq.w:
         active = false
@@ -157,12 +263,38 @@ func _steer(enemies: Array) -> void:
     vy = v.y
 
 
+## Only used when no explosion art is installed at all: a plain expanding ring, so the
+## blast is at least visible. (The cartoon explosions live in godot/private/.)
+func _draw_ring_flash(c: Vector2, t: float) -> void:
+    draw_arc(c, blast_radius * (0.3 + 0.7 * t), 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.8 * (1.0 - t)), 4.0)
+
+
 func _draw() -> void:
     var c := Vector2(w / 2.0, h / 2.0)
     if exploding:
-        var t := float(blast_age) / BLAST_TICKS
-        draw_circle(c, blast_radius * (0.25 + 0.75 * t), Color(1.0, 0.55, 0.1, 0.6 * (1.0 - t)))
-        draw_circle(c, blast_radius * 0.5 * t, Color(1.0, 0.9, 0.4, 0.8 * (1.0 - t)))
+        var t := clampf(blast_age / blast_ticks, 0.0, 1.0)
+        match burst:
+            "chestnut":  # centred on the shot
+                var art := explosion_art()
+                var tex: Texture2D = art[mini(art.size() - 1, int(t * art.size()))]
+                var side := blast_radius * EXPLOSION_SIZE_PER_RADIUS
+                draw_texture_rect(tex, Rect2(c - Vector2(side, side) / 2.0, Vector2(side, side)), false)
+                return
+            "ground":  # rooted on the ground line (the shot's bottom), wide
+                var gnd := ground_art()
+                var gtex: Texture2D = gnd[mini(gnd.size() - 1, int(t * gnd.size()))]
+                var gw := blast_radius * GROUND_SIZE_PER_RADIUS
+                var gh := gw * gtex.get_height() / gtex.get_width()
+                draw_texture_rect(gtex, Rect2(c.x - gw / 2.0, h - gh, gw, gh), false)
+                return
+            "mushroom":  # rising from the ground line
+                var cloud := mushroom_art()
+                var ctex: Texture2D = cloud[mini(cloud.size() - 1, int(t * cloud.size()))]
+                var width := blast_radius * MUSHROOM_SIZE_PER_RADIUS
+                var height := width * ctex.get_height() / ctex.get_width()
+                draw_texture_rect(ctex, Rect2(c.x - width / 2.0, h - height, width, height), false)
+                return
+        _draw_ring_flash(c, t)
         return
     match kind:
         "acorn":

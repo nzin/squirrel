@@ -2,7 +2,7 @@
 
 A side-scrolling game starring a squirrel, built with Godot 4. The project lives in [`godot/`](godot/README.md).
 
-![Squirrel gameplay: run 5 with lives, coins, the equipped weapon, a 1UP heart and a hedgehog, skunk, croco, bees and a tree on the way](docs/screenshot.png)
+![Squirrel gameplay: run 8 - an exploding chestnut blows up two skunks while a swarm of bees flies overhead, with a hedgehog, a fox, a tree and a 1UP heart on the way; the HUD shows lives, coins, the weapon with its chestnut count and the Matrix Fist charges](docs/screenshot.png)
 
 ```bash
 make run     # play from source (windowed)
