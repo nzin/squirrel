@@ -17,7 +17,7 @@ Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weap
 A *game* is a series of **runs**:
 
 1. A run lasts **60 seconds** (progress line along the bottom, timer at the top). Every run is harder: faster scrolling, closer spawns, and new opponents (beavers from run 2, moles from run 3).
-2. **Every 3rd run ends with a boss** (giant beaver, croco, skunk, then a tougher cycle). You get extra acorns, the boss charges after a red blink telegraph, and the run ends when it is defeated.
+2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, giant skunk, then a tougher cycle; the boar uses local-only licensed art, see `CREDITS.md` - without it a giant croco takes its place). You get extra acorns, the boss charges after a red blink telegraph, and the run ends when it is defeated.
 3. A finished run pays a completion bonus, then the screen **fades** to the **shop**; choosing *Start run N* fades into the next run.
 4. You have **3 lives** (small squirrels under the score, max 6). A hit costs one; you get back up after a moment, blinking and invulnerable, with the obstacle that killed you cleared away. Losing the last life ends the game; *Restart* begins a new one. **Coins, weapons and upgrades reset every game**; only the best score, best run and the language are saved (`user://squirrel.cfg`).
 
@@ -26,7 +26,7 @@ A *game* is a series of **runs**:
 - **Acorns** are ammo, spent per throw (each weapon has an ammo cost). Boxes and rainbow acorns refill them; each run starts with 3 acorns (+1 per *Bigger Pouch* level).
 - **Coins** (gold coin counter, top right): skunk/bird 3, beaver/mole 5, croco 6, pterodactyl 8, bosses 40-80; `?` boxes 2, rainbow acorns 5, smashed trees 2, plus the run bonus.
 - **Lives** are earned by defeating a boss (+1), by finding the rare **1UP heart** on the top cloud row (+1, or 10 coins at the maximum), or in the shop (*Extra Life*, 60 coins). Maximum 6.
-- **Shop** (between runs): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
+- **Shop** (between runs, kept by a dwarf who describes each ware in a speech bubble and cheers when you buy): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
 - Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Bouncing Chestnut, Pinecone Bomb, Rainbow Beam, Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn.
 - You can stand on trees and on opponents; collision boxes follow the visible part of each sprite (`hitbox` fractions in `enemy.gd` / `tree_prop.gd`, measured from the art).
 
@@ -46,12 +46,12 @@ Data-driven in `scripts/enemy.gd` (`ai`, `shoot`, `shoot_from`, `shield_from` in
 | Bird | sine wave | 1 | drops eggs (4) |
 | Pterodactyl | blinks, then **dives** at you | 1 (on clouds) | fireballs (5) |
 | Beaver | blinks, then **charges** | 2 | - |
-| Bee | fast **zigzag**, in swarms of 3 | 3 | - |
 | Mole | **tunnels toward you**, surfaces just ahead | 3 | - |
 | Croco | **leaps** | 4 | - |
 | Hedgehog | tucks in and **rolls as a spiky ball** (acorns bounce off) | 5 | - |
-| Fox | runs fast, crouches, **pounces** | 9 | - |
 | Owl | slow wide **swoops** | 7 | - |
+| Bee | fast **zigzag**, in swarms of 3 | 8 | - |
+| Fox | runs fast, crouches, **pounces** | 9 | - |
 
 Beaver, croco, fox and owl can carry a **frontal shield** - protected enemies only appear **from run 7**.
 
@@ -60,9 +60,19 @@ Beaver, croco, fox and owl can carry a **frontal shield** - protected enemies on
 - Projectiles kill on any contact; shoot them down with any weapon. Bosses spit fireballs while they stand.
 - Nobody shoots before run 3.
 
+## Sound
+
+The music is an original **arcade fighting-game soundtrack** (FM slap bass, FM piano and brass, a gritty saw lead, distorted power chords, gated-reverb drums, in a tense minor key), synthesized by `tools/make_arcade_music.py`. The effects are synthesized by `tools/make_sounds.py`, except 17 (impacts, coins, bell, interface clicks) from Kenney's CC0 packs, see `CREDITS.md`. Both run with `make sounds`; the files live in `godot/assets/audio/` (about 2 MB once compressed in the game). `scripts/audio_hub.gd` plays them:
+
+- **Music** follows the situation and crossfades: a first theme (runs 1-2, 144 BPM), the same theme with more layers (3-5) and a faster, double-kick version (6+, 158 BPM), a dark boss track (160 BPM) with tom-roll fills, a funky "bonus stage" groove for the dwarf's shop, a KO fanfare for bosses, a round-win fanfare, and a tense "continue?" sting at game over.
+- **Matrix Fist**: while time slows the music drops in pitch and is muffled, then winds back up.
+- **Effects**: every weapon has its own throw sound; hits, shields, coins, boxes, enemy warnings (charge, dive, pounce, shots), the dwarf's mumbling voice, menus and the fist's whoom, dash, thud and rewind.
+- **Volumes**: *Music* and *Effects* in the pause and game-over menus (LEFT/RIGHT, or ENTER to cycle); saved with your profile.
+- **Replacing a sound**: drop a `.wav` or `.ogg` with the same name into `assets/audio/sfx/` or `music/` (names are in `audio_hub.gd` and the `tools/make_sounds.py` tables). Missing files are skipped silently. Note: browsers only start audio after the first key press.
+
 ## Art
 
-The four newest opponents (hedgehog, fox, owl, bee) are original artwork drawn by `tools/make_sprites.py` (`make sprites`). See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
+The four newest opponents (hedgehog, fox, owl, bee) and the dwarf shopkeeper are original artwork drawn by `tools/make_sprites.py` (`make sprites`). See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
 
 ## Languages
 

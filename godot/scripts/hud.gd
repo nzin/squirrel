@@ -33,6 +33,11 @@ var fist_label: Label
 var matrix_tint: ColorRect
 var matrix_dim: ColorRect
 var life_icons: Array[TextureRect] = []
+var shop_dwarf: TextureRect    # the shopkeeper (visible only in the shop)
+var shop_mood_shown := "idle"  # what the shopkeeper is doing: idle | talk | happy
+var _talk_until := 0.0         # (seconds) the shopkeeper speaks until then
+var _custom_keeper: Texture2D  # optional local-only shopkeeper picture, see CUSTOM_SHOPKEEPER
+var _keeper_base := Vector2.ZERO
 var bar_top: ColorRect
 var bar_bottom: ColorRect
 var run_label: Label
@@ -49,6 +54,10 @@ var _menu_signature := ""
 
 
 const LETTERBOX := 44.0
+## Optional shopkeeper picture (a transparent PNG) that replaces the built-in dwarf.
+## It lives in the git-ignored godot/private/ folder, so licensed art that must not
+## be redistributed never ends up in the public repository (see CREDITS.md).
+const CUSTOM_SHOPKEEPER := "res://private/shopkeeper.png"
 
 
 func _ready() -> void:
@@ -99,6 +108,23 @@ func _ready() -> void:
     overlay.visible = false
     add_child(overlay)
 
+    if ResourceLoader.exists(CUSTOM_SHOPKEEPER):
+        _custom_keeper = load(CUSTOM_SHOPKEEPER)
+    shop_dwarf = TextureRect.new()
+    shop_dwarf.texture = _custom_keeper if _custom_keeper != null else Cfg.tex("dwarf_idle.png")
+    shop_dwarf.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    shop_dwarf.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    if _custom_keeper != null:  # a full-length standing figure: tall and narrow
+        _keeper_base = Vector2(636, 366)
+        shop_dwarf.size = Vector2(150, 228)
+    else:  # the dwarf behind his counter
+        _keeper_base = Vector2(628, 388)
+        shop_dwarf.size = Vector2(164, 205)
+    shop_dwarf.position = _keeper_base
+    shop_dwarf.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    shop_dwarf.visible = false
+    add_child(shop_dwarf)
+
     menu_root = Control.new()
     add_child(menu_root)
 
@@ -110,6 +136,10 @@ func _ready() -> void:
 func refresh(st: Dictionary) -> void:
     var in_run: bool = st["in_run"]
     var show_menu: bool = st["show_menu"]
+    var in_shop: bool = show_menu and st["menu_state"] == "shop"
+    # the shop is its own screen: the in-game counters would only clutter it
+    for n: CanvasItem in [score_label, acorn_label, coin_label, coin_icon, weapon_label]:
+        n.visible = not in_shop
 
     score_label.text = Lang.t("Points: %d", [st["score"]])
     acorn_label.text = Lang.t("Acorns: %d", [st["acorns"]])
@@ -120,7 +150,7 @@ func refresh(st: Dictionary) -> void:
     weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
 
     var fists: int = st["fists"]
-    fist_icon.visible = in_run and fists > 0
+    fist_icon.visible = in_run and fists > 0 and not in_shop
     fist_label.visible = fist_icon.visible
     fist_label.text = "x%d  [F]" % fists
     var m: float = st["matrix"]
@@ -128,7 +158,7 @@ func refresh(st: Dictionary) -> void:
     matrix_dim.color.a = 0.38 * m  # the light dims as time slows and comes back with it
     var lives: int = st["lives"]
     for i in life_icons.size():
-        life_icons[i].visible = in_run and i < lives
+        life_icons[i].visible = in_run and i < lives and not in_shop
     bar_top.size.y = LETTERBOX * m
     bar_bottom.size.y = LETTERBOX * m
     bar_bottom.position.y = Cfg.SCREEN_H - LETTERBOX * m
@@ -161,12 +191,17 @@ func refresh(st: Dictionary) -> void:
     menu_root.visible = show_menu
     fade_rect.color.a = st["fade"]
 
+    shop_dwarf.visible = in_shop
     if show_menu:
         var sig := str([st["menu_state"], st["selection"], st["menu_items"], st["score"], st["best"], st["run"],
             st["coins"], st["shop_rows"], st["shop_selection"], st["shop_message"], Lang.current])
         if sig != _menu_signature:
             _menu_signature = sig
+            if in_shop:
+                _talk_until = Time.get_ticks_msec() / 1000.0 + 1.1  # new line of dialogue
             _rebuild_menu(st)
+        if in_shop:
+            _animate_dwarf(st["shop_mood"])
     else:
         _menu_signature = ""
 
@@ -179,7 +214,7 @@ func _rebuild_menu(st: Dictionary) -> void:
             menu_root.add_child(_centered(Lang.t("GAME OVER"), 64, Color.RED, 120))
             menu_root.add_child(_centered(Lang.t("Reached run %d", [st["run"]]), 28, GOLD, 185))
             menu_root.add_child(_centered(Lang.t("Final Score: %d   (Best: %d)", [st["score"], st["best"]]), 28, Color.WHITE, 222))
-            _menu_items(st, 290.0)
+            _menu_items(st, 272.0)
         "pause":
             menu_root.add_child(_centered(Lang.t("PAUSED"), 58, Color.WHITE, 100))
             _menu_items(st, 190.0)
@@ -197,24 +232,58 @@ func _rebuild_menu(st: Dictionary) -> void:
 
 func _menu_items(st: Dictionary, start_y: float) -> void:
     var items: Array = st["menu_items"]
+    # the more entries, the tighter and smaller they get, so they always fit above the hints
+    var gap := minf(58.0, (486.0 - start_y) / maxf(1.0, items.size() - 1.0))
+    var fsize := 44 if gap >= 56.0 else (40 if gap >= 50.0 else 36)
     for i in items.size():
         var color := Color.YELLOW if i == st["selection"] else Color.WHITE
-        var y := start_y + i * 58.0
-        menu_root.add_child(_centered(items[i], 44, color, y))
+        var y := start_y + i * gap
+        menu_root.add_child(_centered(items[i], fsize, color, y))
         if i == st["selection"]:
-            menu_root.add_child(_centered(">", 44, Color.YELLOW, y, Cfg.SCREEN_W / 2.0 - 250.0))
+            menu_root.add_child(_centered(">", fsize, Color.YELLOW, y, Cfg.SCREEN_W / 2.0 - 250.0))
     menu_root.add_child(_centered(Lang.t("Use UP/DOWN to navigate, ENTER/SPACE to select"), 22, GREY, Cfg.SCREEN_H - 62))
-    menu_root.add_child(_centered(Lang.t("LEFT/RIGHT changes the language"), 20, GREY, Cfg.SCREEN_H - 34))
+    menu_root.add_child(_centered(Lang.t("LEFT/RIGHT changes the language and volume"), 20, GREY, Cfg.SCREEN_H - 34))
+
+
+const SHELF_W := 584.0                     # the wares' shelf takes most of the screen...
+const SHOP_CX := 28.0 + SHELF_W / 2.0      # ...and is centred here; the dwarf is a small figure on the right
+
+
+## Picks the dwarf's picture: delighted after a purchase, mouth moving while he
+## speaks, otherwise idle.
+func _animate_dwarf(mood: String) -> void:
+    var now := Time.get_ticks_msec() / 1000.0
+    var talking := now < _talk_until
+    shop_mood_shown = "happy" if mood == "happy" else ("talk" if talking else "idle")
+    if _custom_keeper != null:
+        # a single picture: it breathes, bobs while talking and hops for joy
+        var bob := sin(now * 2.2) * 1.5
+        if mood == "happy":
+            bob = -absf(sin(now * 9.0)) * 12.0
+        elif talking:
+            bob = -absf(sin(now * 14.0)) * 4.0
+        shop_dwarf.position = _keeper_base + Vector2(0.0, bob)
+        return
+    var tex := "dwarf_idle.png"
+    if mood == "happy":
+        tex = "dwarf_happy.png"
+    elif talking and int(now * 7.0) % 2 == 0:
+        tex = "dwarf_talk.png"
+    shop_dwarf.texture = Cfg.tex(tex)
 
 
 func _shop_screen(st: Dictionary) -> void:
-    menu_root.add_child(_centered(Lang.t("SHOP"), 50, Color.WHITE, 45))
-    _coin_row(st["coins"], 30, 92.0)
+    # a wooden shelf board for the wares
+    menu_root.add_child(_rect(Color(0.22, 0.14, 0.08, 0.92), 28, 112, SHELF_W, 386))
+    menu_root.add_child(_rect(Color(0.62, 0.42, 0.22), 28, 112, SHELF_W, 4))
+    menu_root.add_child(_rect(Color(0.62, 0.42, 0.22), 28, 494, SHELF_W, 4))
+    menu_root.add_child(_centered(Lang.t("SHOP"), 46, Color.WHITE, 42, SHOP_CX))
+    _coin_row(st["coins"], 28, 88.0, SHOP_CX)
     var rows: Array = st["shop_rows"]
     for i in rows.size():
         var row: Dictionary = rows[i]
         var sel: bool = i == st["shop_selection"]
-        var y := 118.0 + i * 31.0
+        var y := 124.0 + i * 31.0
         var col := Color.YELLOW if sel else Color.WHITE
         if row["id"] == Shop.NEXT_RUN_ROW:
             y += 10.0
@@ -222,23 +291,62 @@ func _shop_screen(st: Dictionary) -> void:
         elif row["status"] == Lang.t("EQUIPPED"):
             col = Color(0.5, 1.0, 0.5)
         if sel:
-            menu_root.add_child(_label(">", 28, Color.YELLOW, 60, y, HORIZONTAL_ALIGNMENT_LEFT, 40))
-        menu_root.add_child(_label(row["name"], 24, col, 95, y, HORIZONTAL_ALIGNMENT_LEFT, 480))
-        menu_root.add_child(_label(row["status"], 24, col, 500, y, HORIZONTAL_ALIGNMENT_RIGHT, 220))
-    menu_root.add_child(_centered(rows[st["shop_selection"]]["detail"], 19, GREY, 500))
-    if st["shop_message"] != "":
-        menu_root.add_child(_centered(st["shop_message"], 26, GOLD, 538))
-    menu_root.add_child(_centered(Lang.t("UP/DOWN select - ENTER buy / equip"), 20, GREY, Cfg.SCREEN_H - 22))
+            menu_root.add_child(_rect(Color(1, 1, 1, 0.12), 36, y - 1, SHELF_W - 16, 29))
+            menu_root.add_child(_label(">", 24, Color.YELLOW, 40, y, HORIZONTAL_ALIGNMENT_LEFT, 24))
+        menu_root.add_child(_label(row["name"], 22, col, 66, y, HORIZONTAL_ALIGNMENT_LEFT, 440))
+        menu_root.add_child(_label(row["status"], 22, col, 450, y, HORIZONTAL_ALIGNMENT_RIGHT, 140))
+    # the shopkeeper talks: what you just did, else a description of the selected ware
+    var line: String = st["shop_message"]
+    if line == "":
+        line = rows[st["shop_selection"]]["detail"]
+    if line == "":
+        line = Lang.t("Ready for the next run?")
+    _speech_bubble(line, Vector2(626, 118), Vector2(168, 222 if _custom_keeper != null else 240))
+    menu_root.add_child(_centered(Lang.t("UP/DOWN select - ENTER buy / equip"), 20, GREY, Cfg.SCREEN_H - 22, SHOP_CX))
 
 
-## "<coin icon> 47" centred on the screen.
-func _coin_row(amount: int, size: int, cy: float) -> void:
+## A cream speech bubble whose tail points down at the shopkeeper.
+func _speech_bubble(text: String, pos: Vector2, size: Vector2) -> void:
+    var panel := Panel.new()
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(0.99, 0.95, 0.82)
+    sb.border_color = Color(0.35, 0.22, 0.1)
+    sb.set_border_width_all(3)
+    sb.set_corner_radius_all(14)
+    panel.add_theme_stylebox_override("panel", sb)
+    panel.position = pos
+    panel.size = size
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    menu_root.add_child(panel)
+    var tail := Polygon2D.new()
+    var base := pos + Vector2(size.x * 0.5, size.y - 1.0)
+    tail.polygon = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(16, 0), base + Vector2(0, 28)])
+    tail.color = sb.bg_color
+    menu_root.add_child(tail)
+    var edge := Line2D.new()
+    edge.points = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(0, 28), base + Vector2(16, 0)])
+    edge.width = 3.0
+    edge.default_color = sb.border_color
+    menu_root.add_child(edge)
+    var label := Label.new()
+    label.text = text
+    label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    label.add_theme_font_size_override("font_size", 17)
+    label.add_theme_color_override("font_color", Color(0.25, 0.14, 0.06))
+    label.position = pos + Vector2(12, 8)
+    label.size = size - Vector2(24, 16)
+    label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    menu_root.add_child(label)
+
+
+## "<coin icon> 47" centred on `cx`.
+func _coin_row(amount: int, size: int, cy: float, cx: float = Cfg.SCREEN_W / 2.0) -> void:
     var txt := str(amount)
     var font := ThemeDB.fallback_font
     var tw := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
     var icon_d := size * 0.95
     var total := icon_d + 10.0 + tw
-    var left := Cfg.SCREEN_W / 2.0 - total / 2.0
+    var left := cx - total / 2.0
     var icon := CoinIcon.new(icon_d)
     icon.position = Vector2(left, cy - icon_d / 2.0)
     menu_root.add_child(icon)

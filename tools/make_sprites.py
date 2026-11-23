@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Draws the original sprites of the milestone-3 opponents (hedgehog, fox, owl,
-bee) into godot/assets/. They are our own artwork, so there is nothing to
+"""Draws the original sprites (the milestone-3 opponents hedgehog, fox, owl and bee,
+and the dwarf shopkeeper) into godot/assets/. They are our own artwork, so there is nothing to
 license - see CREDITS.md. Art tooling only; the game itself is pure Godot.
 
     python3 tools/make_sprites.py          # needs Pillow
@@ -209,6 +209,65 @@ def bee(frame):
     return img
 
 
+# ---------------------------------------------------------------- dwarf shopkeeper 240x300
+def dwarf(mood):
+    """Front view, behind his counter. mood: idle | talk | happy"""
+    w, h = 240, 300
+    img = canvas(w, h)
+    d = ImageDraw.Draw(img)
+    skin, beard, beard_dark = (242, 192, 152, 255), (196, 98, 40, 255), (150, 70, 28, 255)
+    # shoulders / shirt and leather apron
+    ell(d, 120, 236, 78, 58, (74, 104, 152, 255))
+    poly(d, [(80, 214), (160, 214), (168, 300), (72, 300)], (128, 84, 48, 255))
+    # beard: big, with a braid on each side
+    for bx in (74, 166):
+        for k in range(4):
+            ell(d, bx, 196 + k * 15, 9, 9, beard_dark if k % 2 else beard, width=2)
+    ell(d, 120, 176, 64, 72, beard)
+    for sx in (-30, -15, 0, 15, 30):  # strands
+        line(d, (120 + sx, 150), (120 + sx * 1.4, 232), beard_dark, 2)
+    # head
+    ell(d, 120, 108, 54, 48, skin)
+    ell(d, 84, 122, 11, 8, (240, 140, 120, 255), outline=None)       # cheeks
+    ell(d, 156, 122, 11, 8, (240, 140, 120, 255), outline=None)
+    # iron helmet with horns
+    poly(d, [(64, 76), (30, 40), (22, 18), (44, 34), (72, 58)], (240, 232, 205, 255))
+    poly(d, [(176, 76), (210, 40), (218, 18), (196, 34), (168, 58)], (240, 232, 205, 255))
+    d.pieslice(sc([64, 36, 176, 116]), 180, 360, fill=(150, 156, 170, 255), outline=INK, width=int(2.5 * S))
+    poly(d, [(64, 76), (176, 76), (176, 88), (64, 88)], (96, 100, 114, 255))
+    ell(d, 120, 82, 6, 6, (240, 200, 60, 255), width=2)                 # rivet
+    # eyes + bushy brows
+    if mood == "happy":
+        for ex in (98, 142):
+            d.arc(sc([ex - 11, 96, ex + 11, 116]), 200, 340, fill=INK, width=int(3.5 * S))
+    else:
+        for ex in (98, 142):
+            ell(d, ex, 104, 9, 10, (255, 255, 255, 255), width=2)
+            ell(d, ex, 106, 4.5, 5.5, (30, 20, 14, 255), outline=None)
+    ell(d, 96, 92, 17, 7, beard_dark, width=2)
+    ell(d, 144, 92, 17, 7, beard_dark, width=2)
+    # round red nose
+    ell(d, 120, 124, 15, 13, (232, 120, 104, 255))
+    ell(d, 115, 120, 4, 3, (255, 200, 190, 255), outline=None)
+    # moustache + mouth
+    if mood == "talk":
+        ell(d, 120, 154, 14, 10, (110, 30, 30, 255))
+    elif mood == "happy":
+        d.arc(sc([100, 134, 140, 166]), 20, 160, fill=INK, width=int(3 * S))
+    else:
+        line(d, (108, 154), (132, 154), INK, 3)
+    ell(d, 98, 142, 28, 12, beard)
+    ell(d, 142, 142, 28, 12, beard)
+    # wooden counter with a pile of coins
+    d.rectangle(sc([0, 246, 240, 300]), fill=(150, 100, 58, 255), outline=INK, width=int(2.5 * S))
+    d.rectangle(sc([0, 246, 240, 258]), fill=(190, 136, 82, 255), outline=INK, width=int(2.5 * S))
+    for px in (60, 120, 180):
+        line(d, (px, 258), (px, 300), (110, 70, 38, 255), 2.5)
+    for k, (cx, cy) in enumerate([(30, 244), (50, 244), (40, 232)]):
+        ell(d, cx, cy, 13, 6, (255, 205, 40, 255), outline=(150, 100, 10, 255), width=2)
+    return img
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     save(hedgehog("1"), "hedgehog1.png", 280, 200)
@@ -220,3 +279,5 @@ if __name__ == "__main__":
     save(owl("2"), "owl2.png", 220, 240)
     save(bee("1"), "bee1.png", 150, 120)
     save(bee("2"), "bee2.png", 150, 120)
+    for mood in ("idle", "talk", "happy"):
+        save(dwarf(mood), "dwarf_%s.png" % mood, 240, 300)

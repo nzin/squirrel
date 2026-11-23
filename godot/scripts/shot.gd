@@ -29,6 +29,7 @@ var hit_ids := {}    # enemies already hit by this (piercing) shot / leg
 var origin_x := 0.0
 var returning := false
 var spin := 0.0
+var bounced := false  # set when a chestnut bounces (Game plays the sound)
 
 var exploding := false
 var exploded := false
@@ -128,6 +129,7 @@ func update(sq: Squirrel, enemies: Array) -> void:
             detonate()
         else:
             vy = -7.0  # chestnut bounces
+            bounced = true
 
     if returning and x <= sq.x + sq.w:
         active = false

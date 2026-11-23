@@ -49,7 +49,7 @@ const BEAVER_FROM_RUN := 2
 const MOLE_FROM_RUN := 3
 const CROCO_FROM_RUN := 4
 const CROCO_SPAWN_DISTANCE := 2300
-const BEE_FROM_RUN := 3          # swarms of 3
+const BEE_FROM_RUN := 8          # swarms of 3
 const BEE_SPAWN_DISTANCE := 1700
 const HEDGEHOG_FROM_RUN := 5
 const HEDGEHOG_SPAWN_DISTANCE := 2400
@@ -123,6 +123,7 @@ var controls_return := "main"
 var menu_selection := 0
 var shop_selection := 0
 var shop_message := ""
+var shop_mood := "idle"        # the dwarf: "idle" | "happy" (after a purchase)
 var fade := 0.0                # 0 = clear, 1 = black
 var fade_dir := 0              # +1 fading out, -1 fading in, 0 idle
 var _fade_action := Callable()
@@ -131,7 +132,10 @@ var _fade_action := Callable()
 var squirrel: Squirrel
 var background: Background
 var hud: Hud
+var audio: AudioHub
 var layers := {}
+var _was_jumping := false
+var _fist_end_played := false
 
 var shots: Array[Shot] = []
 var boxes: Array[Box] = []
@@ -168,6 +172,11 @@ func _ready() -> void:
 
     hud = Hud.new()
     add_child(hud)
+
+    audio = AudioHub.new()
+    audio.music_volume = profile.music_volume
+    audio.sfx_volume = profile.sfx_volume
+    add_child(audio)
 
     new_game()
 
@@ -302,6 +311,7 @@ func _spawn_boss() -> void:
     acorns = maxi(acorns, BOSS_AMMO)
     announce_text = Lang.t("WARNING: BOSS!")
     announce_timer = ANNOUNCE_TIME
+    audio.sfx("boss_roar", 0.0)
 
 
 func _complete_run(boss_defeated: bool) -> void:
@@ -313,13 +323,17 @@ func _complete_run(boss_defeated: bool) -> void:
     loadout.add_coins(complete_bonus)
     complete_life = boss_defeated and loadout.add_life()  # beating a boss earns a life
     profile.record_game(score, run)
+    audio.sfx("boss_defeated" if boss_defeated else "run_complete", 0.0)
 
 
 func _enter_shop() -> void:
     phase = "shop"
     menu_state = "shop"
     shop_selection = 0
-    shop_message = ""
+    shop_mood = "idle"
+    shop_message = Lang.t("Welcome! Take a look at my wares.")
+    audio.sfx("shop_bell", 0.0)
+    audio.speak(shop_message)
 
 
 func _begin_next_run() -> void:
@@ -331,6 +345,7 @@ func _begin_next_run() -> void:
 func start_fade(action: Callable) -> void:
     if fade_dir != 0:
         return
+    audio.sfx("fade", 0.0)
     fade_dir = 1
     _fade_action = action
 
@@ -364,7 +379,10 @@ func _platforms() -> Array:
 
 
 func do_jump() -> void:
+    var before := squirrel.velocity_y
     squirrel.jump(boxes, _platforms())
+    if squirrel.velocity_y < before:
+        audio.sfx("jump")
 
 
 func do_throw() -> void:
@@ -377,6 +395,7 @@ func do_throw() -> void:
         if acorns < cost:
             return
     acorns -= cost
+    audio.sfx("throw_" + id)
     var sx := squirrel.x + squirrel.w
     var sy := squirrel.y + int(squirrel.h / 2.0)
     match id:
@@ -430,12 +449,14 @@ func _input(event: InputEvent) -> void:
 func pause() -> void:
     if phase != "run" or squirrel.game_over:
         return
+    audio.sfx("pause", 0.0)
     paused = true
     menu_state = "pause"
     menu_selection = 0
 
 
 func resume() -> void:
+    audio.sfx("ui_back", 0.0)
     paused = false
     menu_state = "main"
 
@@ -447,6 +468,8 @@ func menu_items() -> Array[Dictionary]:
         items.append({"id": "continue", "text": Lang.t("Continue")})
     items.append({"id": "restart", "text": Lang.t("Restart")})
     items.append({"id": "language", "text": Lang.t("Language: %s", [Lang.native_name()])})
+    items.append({"id": "music", "text": Lang.t("Music: %d%%", [roundi(profile.music_volume * 100.0)])})
+    items.append({"id": "sfx", "text": Lang.t("Effects: %d%%", [roundi(profile.sfx_volume * 100.0)])})
     items.append({"id": "controls", "text": Lang.t("Show Controls")})
     if not OS.has_feature("web"):  # no "quit" in a browser tab
         items.append({"id": "quit", "text": Lang.t("Quit")})
@@ -455,6 +478,30 @@ func menu_items() -> Array[Dictionary]:
 
 func toggle_language() -> void:
     profile.set_language(Lang.next_language())
+
+
+## Change a volume slider by `step` (wraps to 0 after 100 when `wrap`); previews the new level.
+func change_volume(which: String, step: float, wrap := false) -> void:
+    var v: float = profile.music_volume if which == "music" else profile.sfx_volume
+    v = snappedf(v + step, 0.1)
+    if v > 1.0001:
+        v = 0.0 if wrap else 1.0
+    v = clampf(v, 0.0, 1.0)
+    if which == "music":
+        profile.set_music_volume(v)
+        audio.set_music_volume(v)
+    else:
+        profile.set_sfx_volume(v)
+        audio.set_sfx_volume(v)
+        audio.sfx("coin", 0.0)
+
+
+## What the shopkeeper is saying (the same text the speech bubble shows).
+func _shop_line(rows: Array[Dictionary]) -> String:
+    if shop_message != "":
+        return shop_message
+    var detail: String = rows[shop_selection]["detail"]
+    return detail if detail != "" else Lang.t("Ready for the next run?")
 
 
 func _shop_rows() -> Array[Dictionary]:
@@ -468,11 +515,17 @@ func _menu_input(event: InputEvent) -> void:
             var id: String = items[menu_selection]["id"]
             if event.is_action_pressed("ui_up"):
                 menu_selection = (menu_selection + items.size() - 1) % items.size()
+                audio.sfx("ui_move", 0.0)
             elif event.is_action_pressed("ui_down"):
                 menu_selection = (menu_selection + 1) % items.size()
+                audio.sfx("ui_move", 0.0)
             elif id == "language" and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
                 toggle_language()
+                audio.sfx("ui_select", 0.0)
+            elif (id == "music" or id == "sfx") and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+                change_volume(id, 0.1 if event.is_action_pressed("ui_right") else -0.1)
             elif event.is_action_pressed("ui_accept"):
+                audio.sfx("ui_select", 0.0)
                 match id:
                     "continue":
                         resume()
@@ -480,6 +533,8 @@ func _menu_input(event: InputEvent) -> void:
                         start_fade(new_game)
                     "language":
                         toggle_language()
+                    "music", "sfx":
+                        change_volume(id, 0.1, true)
                     "controls":
                         controls_return = menu_state
                         menu_state = "controls"
@@ -489,20 +544,34 @@ func _menu_input(event: InputEvent) -> void:
                 resume()
         "shop":
             var rows := _shop_rows()
-            if event.is_action_pressed("ui_up"):
-                shop_selection = (shop_selection + rows.size() - 1) % rows.size()
+            if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
+                var step := rows.size() - 1 if event.is_action_pressed("ui_up") else 1
+                shop_selection = (shop_selection + step) % rows.size()
                 shop_message = ""
-            elif event.is_action_pressed("ui_down"):
-                shop_selection = (shop_selection + 1) % rows.size()
-                shop_message = ""
+                shop_mood = "idle"
+                audio.sfx("ui_move", 0.0)
+                audio.speak(_shop_line(rows))
             elif event.is_action_pressed("ui_accept"):
                 var row_id: String = rows[shop_selection]["id"]
                 if row_id == Shop.NEXT_RUN_ROW:
+                    audio.sfx("ui_select", 0.0)
                     start_fade(_begin_next_run)
                 else:
+                    var coins_before := loadout.coins
+                    var equipped_before := loadout.equipped
                     shop_message = Shop.activate(loadout, row_id)
+                    shop_mood = "happy" if loadout.coins < coins_before else "idle"  # he likes being paid
+                    if loadout.coins < coins_before:
+                        audio.sfx("buy", 0.0)
+                        audio.sfx("dwarf_laugh", 0.0)
+                    elif loadout.equipped != equipped_before:
+                        audio.sfx("ui_select", 0.0)
+                    else:
+                        audio.sfx("no_money", 0.0)
+                    audio.speak(shop_message)
         _:
             if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
+                audio.sfx("ui_back", 0.0)
                 menu_state = controls_return
 
 
@@ -529,7 +598,10 @@ func use_fist() -> bool:
     fist_x0 = squirrel.x
     fist_dash_started = false
     fist_turned = false
+    _fist_end_played = false
     fist_hit.clear()
+    audio.sfx("fist_start", 0.0)
+    audio.sfx("fist_dash", 0.0)
     return true
 
 
@@ -547,6 +619,9 @@ func _update_fist_clock(delta: float) -> void:
     if not fist_active:
         Cfg.time_scale = 1.0
         return
+    if fist_t < FIST_BACK_AT and fist_t + delta >= FIST_BACK_AT and not _fist_end_played:
+        _fist_end_played = true
+        audio.sfx("fist_end", 0.0)  # the world winds back up
     fist_t += delta  # real time: the sequence always lasts 4 s whatever the slow-mo
     if fist_t >= FIST_DURATION:
         _end_fist()
@@ -580,6 +655,8 @@ func _apply_fist_motion() -> void:
         if not fist_turned:  # turnaround: everything may be hit again on the way back
             fist_turned = true
             fist_hit.clear()
+            audio.sfx("fist_turn", 0.0)
+            audio.sfx("fist_dash", 0.0, -3.0)
             _spawn_fx(Vector2(squirrel.x + squirrel.w, squirrel.y + squirrel.h / 2.0))
         var u2 := smoothstep(0.0, 1.0, (fist_t - FIST_TURN_AT) / FIST_LEG)
         squirrel.x = lerpf(fist_x1, fist_x0, u2)
@@ -633,6 +710,7 @@ func _fist_strike(prev_x: float) -> void:
     for e: Enemy in enemies:
         if e.hittable() and not fist_hit.has(e.get_instance_id()) and e.rect().intersects(sweep):
             fist_hit[e.get_instance_id()] = true
+            audio.sfx("fist_hit", 0.08)
             _damage_enemy(e, Weapons.FIST_DAMAGE)
             _spawn_fx(e.rect().get_center())
     for t: TreeProp in trees:
@@ -640,6 +718,7 @@ func _fist_strike(prev_x: float) -> void:
             fist_hit[t.get_instance_id()] = true
             t.active = false
             loadout.add_coins(TREE_COINS)
+            audio.sfx("smash")
             _spawn_fx(t.rect().get_center())
     for es: EnemyShot in enemy_shots:
         if es.active and es.rect().intersects(sweep):
@@ -686,8 +765,28 @@ func _physics_process(delta: float) -> void:
     frame(delta)
 
 
+## Which music should be playing right now ("" = silence).
+func _music_track() -> String:
+    if phase == "shop":
+        return "shop"
+    if phase == "run_complete":
+        return ""  # the fanfare plays instead
+    if squirrel.game_over and loadout.lives <= 0:
+        return ""  # game over: the sting, then silence
+    if boss_spawned:
+        return "boss"
+    return "run_a" if run <= 2 else ("run_b" if run <= 5 else "run_c")
+
+
+func _update_audio() -> void:
+    audio.play_music(_music_track())
+    audio.set_world_speed(Cfg.time_scale)  # slow motion slows the music too
+    audio.set_muffled(paused)
+
+
 func frame(delta: float) -> void:
     _update_fade(delta)
+    _update_audio()
     # frozen: paused, between runs, or while the screen is fading in/out
     if paused or phase != "run" or fade_dir != 0:
         if phase == "run_complete" and fade_dir == 0:
@@ -715,6 +814,9 @@ func frame(delta: float) -> void:
     # enemies (only the ground and the clouds still hold it)
     var ghosted := _fist_ghosted()
     squirrel.update([] if ghosted else boxes, clouds if ghosted else _platforms())
+    if _was_jumping and not squirrel.is_jumping and not squirrel.game_over:
+        audio.sfx("land")
+    _was_jumping = squirrel.is_jumping
     _apply_fist_motion()
     if invuln_timer > 0.0 and squirrel.game_over:
         squirrel.game_over = false  # blinking after a respawn: boxes can't kill either
@@ -740,12 +842,17 @@ func frame(delta: float) -> void:
             var fired := e.take_shot()
             if fired != "":
                 _fire_enemy_shot(e, fired)
+            var cue := e.take_sound()
+            if cue != "" and e.x < Cfg.SCREEN_W:
+                audio.sfx(cue)
         if not e.active:
             _drop(enemies, e)
     for es: EnemyShot in enemy_shots.duplicate():
         if live:
             es.update(gd)
         if not es.active:
+            if es.kind == "egg" and es.y + es.h >= Cfg.SOIL_Y:
+                audio.sfx("splat")
             _drop(enemy_shots, es)
     for c: Cloud in clouds.duplicate():
         if live:
@@ -793,9 +900,13 @@ func _begin_game_over_if_needed() -> void:
         loadout.lives = maxi(0, loadout.lives - 1)
         if loadout.lives <= 0:
             profile.record_game(score, run)
+            audio.sfx("game_over", 0.0)
+        else:
+            audio.sfx("life_lost")
 
 
 func _respawn() -> void:
+    audio.sfx("respawn")
     squirrel.reset()
     over_started = false
     over_elapsed = 0.0
@@ -868,7 +979,7 @@ func _hud_state() -> Dictionary:
         "menu_state": menu_state, "selection": menu_selection,
         "menu_items": menu_items().map(func(i: Dictionary) -> String: return i["text"]),
         "shop_rows": _shop_rows() if phase == "shop" else [], "shop_selection": shop_selection,
-        "shop_message": shop_message,
+        "shop_message": shop_message, "shop_mood": shop_mood,
     }
 
 
@@ -1027,6 +1138,9 @@ func _spawn_ptero(on_cloud: bool) -> void:
 func _update_shots() -> void:
     for sh: Shot in shots.duplicate():
         sh.update(squirrel, enemies)
+        if sh.bounced:
+            sh.bounced = false
+            audio.sfx("land", 0.1, -3.0)  # the chestnut hits the ground
         if sh.active and not sh.exploding:
             _shot_hits_enemies(sh)
         if sh.active and not sh.exploding:
@@ -1045,6 +1159,7 @@ func _shot_hits_enemies(sh: Shot) -> void:
             continue
         if e.blocks(sh) and sh.kind != "pinecone":  # the shield stops it (bombs still blast)
             e.shield_flash = 0.15
+            audio.sfx("shield_clang")
             if sh.kind == "boomerang":  # bounces off and flies back
                 sh.returning = true
                 sh.vx = -absf(sh.vx)
@@ -1092,9 +1207,15 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
             es = EnemyShot.create("fire", from.x, from.y, (squirrel.rect().get_center() - from).normalized())
     layers["shots"].add_child(es)
     enemy_shots.append(es)
+    match kind:
+        "gas":
+            audio.sfx("hiss")
+        "fire":
+            audio.sfx("fireball")
 
 
 func _blast(sh: Shot) -> void:
+    audio.sfx("boom")
     var c := sh.blast_center()
     for e: Enemy in enemies:
         if e.hittable() and e.rect().get_center().distance_to(c) <= sh.blast_radius + minf(e.w, e.h) / 2.0:
@@ -1106,6 +1227,10 @@ func _damage_enemy(e: Enemy, dmg: int) -> void:
     if e.hit(dmg):
         score += 10 if e.is_boss else 1
         loadout.add_coins(e.cfg["coins"])
+        audio.sfx("enemy_defeat")
+        audio.sfx("coin", 0.1, -2.0)
+    else:
+        audio.sfx("hit")
 
 
 ## An enemy/tree is only lethal when it reaches the squirrel's front (left side
@@ -1132,6 +1257,7 @@ func _check_hazards() -> void:
     for r in rainbows:
         if r.active and not r.collected and r.rect().intersects(sr):
             r.collect()
+            audio.sfx("rainbow_collect")
             acorns += 5
             score += 2
             loadout.add_coins(RAINBOW_COINS)
@@ -1140,6 +1266,7 @@ func _check_hazards() -> void:
     for lp in life_pickups:
         if lp.active and lp.rect().intersects(sr):
             lp.active = false
+            audio.sfx("oneup")
             _gain_life()
             var fx := PunchFx.new()
             fx.position = lp.rect().get_center()
@@ -1158,6 +1285,8 @@ func _update_boxes(live: bool) -> void:
             if b.should_collect:
                 b.should_collect = false
                 b.mark_collected()
+                audio.sfx("box_bump")
+                audio.sfx("coin", 0.1, -1.0)
                 var gained := randi_range(1, 3)
                 acorns += gained
                 loadout.add_coins(BOX_COINS)
