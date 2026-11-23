@@ -40,7 +40,8 @@ var life_icons: Array[TextureRect] = []
 var shop_dwarf: TextureRect    # the shopkeeper (visible only in the shop)
 var shop_mood_shown := "idle"  # what the shopkeeper is doing: idle | talk | happy
 var _talk_until := 0.0         # (seconds) the shopkeeper speaks until then
-var _custom_keeper: Texture2D  # optional local-only shopkeeper picture, see CUSTOM_SHOPKEEPER
+var _custom_keeper: Texture2D  # optional local-only shopkeeper picture, see SHOPKEEPER_PATHS
+var has_keeper := false        # is there a shopkeeper figure at all?
 var _keeper_base := Vector2.ZERO
 var bar_top: ColorRect
 var bar_bottom: ColorRect
@@ -58,10 +59,11 @@ var _menu_signature := ""
 
 
 const LETTERBOX := 44.0
-## Optional shopkeeper picture (a transparent PNG) that replaces the built-in dwarf.
-## It lives in the git-ignored godot/private/ folder, so licensed art that must not
-## be redistributed never ends up in the public repository (see CREDITS.md).
-const CUSTOM_SHOPKEEPER := "res://private/shopkeeper.png"
+## The shopkeeper picture (a transparent PNG named shopkeeper.png). It is looked for in
+## assets/ first, then in the git-ignored private/ folder (licensed art that must not be
+## redistributed lives there - see CREDITS.md). Without it the shop has no figure: the
+## ware descriptions simply appear in a note panel.
+const SHOPKEEPER_PATHS := ["res://assets/shopkeeper.png", "res://private/shopkeeper.png"]
 
 
 func _ready() -> void:
@@ -114,18 +116,17 @@ func _ready() -> void:
     overlay.visible = false
     add_child(overlay)
 
-    if ResourceLoader.exists(CUSTOM_SHOPKEEPER):
-        _custom_keeper = load(CUSTOM_SHOPKEEPER)
+    for path: String in SHOPKEEPER_PATHS:
+        if ResourceLoader.exists(path):
+            _custom_keeper = load(path)
+            break
+    has_keeper = _custom_keeper != null
     shop_dwarf = TextureRect.new()
-    shop_dwarf.texture = _custom_keeper if _custom_keeper != null else Cfg.tex("dwarf_idle.png")
+    shop_dwarf.texture = _custom_keeper
     shop_dwarf.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     shop_dwarf.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-    if _custom_keeper != null:  # a full-length standing figure: tall and narrow
-        _keeper_base = Vector2(636, 366)
-        shop_dwarf.size = Vector2(150, 228)
-    else:  # the dwarf behind his counter
-        _keeper_base = Vector2(628, 388)
-        shop_dwarf.size = Vector2(164, 205)
+    _keeper_base = Vector2(636, 366)  # a full-length standing figure: tall and narrow
+    shop_dwarf.size = Vector2(150, 228)
     shop_dwarf.position = _keeper_base
     shop_dwarf.mouse_filter = Control.MOUSE_FILTER_IGNORE
     shop_dwarf.visible = false
@@ -207,7 +208,7 @@ func refresh(st: Dictionary) -> void:
     menu_root.visible = show_menu
     fade_rect.color.a = st["fade"]
 
-    shop_dwarf.visible = in_shop
+    shop_dwarf.visible = in_shop and has_keeper
     if show_menu:
         var sig := str([st["menu_state"], st["selection"], st["menu_items"], st["score"], st["best"], st["run"],
             st["coins"], st["shop_rows"], st["shop_selection"], st["shop_message"], Lang.current])
@@ -217,7 +218,7 @@ func refresh(st: Dictionary) -> void:
                 _talk_until = Time.get_ticks_msec() / 1000.0 + 1.1  # new line of dialogue
             _rebuild_menu(st)
         if in_shop:
-            _animate_dwarf(st["shop_mood"])
+            _animate_keeper(st["shop_mood"])
     else:
         _menu_signature = ""
 
@@ -267,25 +268,19 @@ const SHOP_CX := 28.0 + SHELF_W / 2.0      # ...and is centred here; the dwarf i
 
 ## Picks the dwarf's picture: delighted after a purchase, mouth moving while he
 ## speaks, otherwise idle.
-func _animate_dwarf(mood: String) -> void:
+func _animate_keeper(mood: String) -> void:
     var now := Time.get_ticks_msec() / 1000.0
     var talking := now < _talk_until
     shop_mood_shown = "happy" if mood == "happy" else ("talk" if talking else "idle")
-    if _custom_keeper != null:
-        # a single picture: it breathes, bobs while talking and hops for joy
-        var bob := sin(now * 2.2) * 1.5
-        if mood == "happy":
-            bob = -absf(sin(now * 9.0)) * 12.0
-        elif talking:
-            bob = -absf(sin(now * 14.0)) * 4.0
-        shop_dwarf.position = _keeper_base + Vector2(0.0, bob)
+    if not has_keeper:
         return
-    var tex := "dwarf_idle.png"
+    # a single picture: it breathes, bobs while talking and hops for joy
+    var bob := sin(now * 2.2) * 1.5
     if mood == "happy":
-        tex = "dwarf_happy.png"
-    elif talking and int(now * 7.0) % 2 == 0:
-        tex = "dwarf_talk.png"
-    shop_dwarf.texture = Cfg.tex(tex)
+        bob = -absf(sin(now * 9.0)) * 12.0
+    elif talking:
+        bob = -absf(sin(now * 14.0)) * 4.0
+    shop_dwarf.position = _keeper_base + Vector2(0.0, bob)
 
 
 func _shop_screen(st: Dictionary) -> void:
@@ -317,12 +312,15 @@ func _shop_screen(st: Dictionary) -> void:
         line = rows[st["shop_selection"]]["detail"]
     if line == "":
         line = Lang.t("Ready for the next run?")
-    _speech_bubble(line, Vector2(626, 118), Vector2(168, 222 if _custom_keeper != null else 240))
+    if has_keeper:  # the shopkeeper talks
+        _speech_bubble(line, Vector2(626, 118), Vector2(168, 222), true)
+    else:  # no figure: a plain note panel beside the shelf
+        _speech_bubble(line, Vector2(626, 118), Vector2(168, 380), false)
     menu_root.add_child(_centered(Lang.t("UP/DOWN select - ENTER buy / equip"), 20, GREY, Cfg.SCREEN_H - 22, SHOP_CX))
 
 
 ## A cream speech bubble whose tail points down at the shopkeeper.
-func _speech_bubble(text: String, pos: Vector2, size: Vector2) -> void:
+func _speech_bubble(text: String, pos: Vector2, size: Vector2, with_tail := true) -> void:
     var panel := Panel.new()
     var sb := StyleBoxFlat.new()
     sb.bg_color = Color(0.99, 0.95, 0.82)
@@ -334,16 +332,17 @@ func _speech_bubble(text: String, pos: Vector2, size: Vector2) -> void:
     panel.size = size
     panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     menu_root.add_child(panel)
-    var tail := Polygon2D.new()
-    var base := pos + Vector2(size.x * 0.5, size.y - 1.0)
-    tail.polygon = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(16, 0), base + Vector2(0, 28)])
-    tail.color = sb.bg_color
-    menu_root.add_child(tail)
-    var edge := Line2D.new()
-    edge.points = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(0, 28), base + Vector2(16, 0)])
-    edge.width = 3.0
-    edge.default_color = sb.border_color
-    menu_root.add_child(edge)
+    if with_tail:
+        var tail := Polygon2D.new()
+        var base := pos + Vector2(size.x * 0.5, size.y - 1.0)
+        tail.polygon = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(16, 0), base + Vector2(0, 28)])
+        tail.color = sb.bg_color
+        menu_root.add_child(tail)
+        var edge := Line2D.new()
+        edge.points = PackedVector2Array([base + Vector2(-16, 0), base + Vector2(0, 28), base + Vector2(16, 0)])
+        edge.width = 3.0
+        edge.default_color = sb.border_color
+        menu_root.add_child(edge)
     var label := Label.new()
     label.text = text
     label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

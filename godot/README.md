@@ -23,10 +23,10 @@ A *game* is a series of **runs**:
 
 ## Economy and weapons
 
-- **Acorns** are ammo, spent per throw (each weapon has an ammo cost). Boxes and rainbow acorns refill them; each run starts with 3 acorns (+1 per *Bigger Pouch* level).
+- **Acorns** are ammo, spent per throw (each weapon has an ammo cost). Boxes and rainbow acorns refill them. **Acorns carry over from one run to the next** within a game; a run never starts with fewer than 3 (+1 per *Bigger Pouch* level, so the pouch is the minimum you start with).
 - **Coins** (gold coin counter, top right): skunk/bird 3, beaver/mole 5, croco 6, pterodactyl 8, bosses 40-80; `?` boxes 2, rainbow acorns 5, smashed trees 2, plus the run bonus.
 - **Lives** are earned by defeating a boss (+1), by finding the rare **1UP heart** on the top cloud row (+1, or 10 coins at the maximum), or in the shop (*Extra Life*, 60 coins). Maximum 6.
-- **Shop** (between runs, kept by a dwarf who describes each ware in a speech bubble and cheers when you buy): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
+- **Shop** (between runs; a shopkeeper figure describes each ware in a speech bubble and cheers when you buy if its local art is installed, otherwise the descriptions appear in a note panel): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
 - Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes with area damage; sold in packs of 10, thrown with the **D** key like the Matrix Fist is on **F**, and uses no acorns), Pinecone Bomb (a burst along the ground when it lands, a mushroom cloud when it hits something), Rainbow Beam, Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn. Every explosion starts with a brief white flash of the whole screen.
 - You can stand on trees and on opponents; collision boxes follow the visible part of each sprite (`hitbox` fractions in `enemy.gd` / `tree_prop.gd`, measured from the art).
 
@@ -48,12 +48,11 @@ Data-driven in `scripts/enemy.gd` (`ai`, `shoot`, `shoot_from`, `shield_from` in
 | Beaver | blinks, then **charges** | 2 | - |
 | Mole | **tunnels toward you**, surfaces just ahead | 3 | - |
 | Croco | **leaps** | 4 | - |
-| Hedgehog | tucks in and **rolls as a spiky ball** (acorns bounce off) | 5 | - |
-| Owl | slow wide **swoops** | 7 | - |
-| Bee | fast **zigzag**, in swarms of 3 | 8 | - |
-| Fox | runs fast, crouches, **pounces** | 9 | - |
+| Owl *(local art only)* | slow wide **swoops**, blinking | 7 | - |
+| Bee *(local art only)* | fast **zigzag**, in swarms of 3 | 8 | - |
+| Raccoon *(local art only)* | prowls, stands up and **throws nuts** at you (a lob), eats, walks on | 9 | nuts |
 
-Beaver, croco, fox and owl can carry a **frontal shield** - protected enemies only appear **from run 7**.
+Beaver, croco, raccoon and owl can carry a **frontal shield** - protected enemies only appear **from run 7**.
 
 - **Shield** (run 7+): blocks acorns from the front; get it with the Rainbow Beam, a Pinecone blast, a boomerang on its way back, or the Matrix Fist.
 - **Armor and enrage**: +1 hp every 3 runs, hit flash, small health bar; below half hp an enemy is faster and red-tinted (**enraged enemies only appear from run 4**, protected ones from run 7).
@@ -64,15 +63,15 @@ Beaver, croco, fox and owl can carry a **frontal shield** - protected enemies on
 
 The music is an original **arcade fighting-game soundtrack** (FM slap bass, FM piano and brass, a gritty saw lead, **distorted guitar riffs**, gated-reverb drums, in tense minor keys, plus a synthwave chase and a taiko boss), synthesized by `tools/make_arcade_music.py`. The effects are synthesized by `tools/make_sounds.py`, except 17 (impacts, coins, bell, interface clicks) from Kenney's CC0 packs, see `CREDITS.md`. Both run with `make sounds`; the files live in `godot/assets/audio/` (about 2 MB once compressed in the game). `scripts/audio_hub.gd` plays them:
 
-- **Music** follows the situation and crossfades: arcade rock with guitar riffs for runs 1-2 (144 BPM, light riff) and 3-5 (150 BPM, full-volume riff); a **synthwave night chase** from run 6 (150 BPM: octave-bouncing bass, 16th arpeggios, a pumping supersaw pad, an echoing lead, noise risers); a **taiko and Eastern boss track** (156 BPM: taiko ensemble, a buzzing shamisen riff in the hirajoshi scale, shakuhachi melody, gong); a funky "bonus stage" groove with chicken-scratch guitar for the dwarf's shop; a KO fanfare for bosses, a round-win fanfare, and a **game-over gong with a lone shakuhachi**.
+- **Music** follows the situation and crossfades: arcade rock with guitar riffs for runs 1-2 (144 BPM, light riff) and 3-5 (150 BPM, full-volume riff); a **synthwave night chase** from run 6 (150 BPM: octave-bouncing bass, 16th arpeggios, a pumping supersaw pad, an echoing lead, noise risers); a **taiko and Eastern boss track** (156 BPM: taiko ensemble, a buzzing shamisen riff in the hirajoshi scale, shakuhachi melody, gong); a funky "bonus stage" groove with chicken-scratch guitar for the shop; a KO fanfare for bosses, a round-win fanfare, and a **game-over gong with a lone shakuhachi**.
 - **Matrix Fist**: while time slows the music drops in pitch and is muffled, then winds back up.
-- **Effects**: every weapon has its own throw sound; hits, shields, coins, boxes, enemy warnings (charge, dive, pounce, shots), the dwarf's mumbling voice, menus and the fist's whoom, dash, thud and rewind.
+- **Effects**: every weapon has its own throw sound; hits, shields, coins, boxes, enemy warnings (charge, dive, nut throws, shots), the shopkeeper's mumbling voice, menus and the fist's whoom, dash, thud and rewind.
 - **Volumes**: *Music* and *Effects* in the pause and game-over menus (LEFT/RIGHT, or ENTER to cycle); saved with your profile.
 - **Replacing a sound**: drop a `.wav` or `.ogg` with the same name into `assets/audio/sfx/` or `music/` (names are in `audio_hub.gd` and the `tools/make_sounds.py` tables). Missing files are skipped silently. Note: browsers only start audio after the first key press.
 
 ## Art
 
-The four newest opponents (hedgehog, fox, owl, bee) and the dwarf shopkeeper are original artwork drawn by `tools/make_sprites.py` (`make sprites`). See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
+The bee, the owl, the raccoon, the shopkeeper, the boar boss and the explosion animations are licensed and live only in the git-ignored `godot/private/` folder: **without them the bee, the owl and the raccoon do not spawn and the shop has no figure** (everything else works). The shop figure is whatever picture is named `shopkeeper.png`, looked for in `godot/assets/` first and then in `godot/private/`. See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
 
 ## Languages
 

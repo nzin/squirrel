@@ -6,12 +6,14 @@ extends Entity
 ##   gas   skunk: a slow stink cloud rolling along the ground - jump over it
 ##   egg   bird: dropped, falls under gravity
 ##   fire  ptero / boss: a fireball aimed at the squirrel
+##   nut   raccoon: thrown in a horizontal straight line from its front paws (jump over it)
 
 const EGG_G := 0.35
 const SPECS := {
     "gas":  {"w": 36.0, "h": 28.0, "speed": 4.2, "gravity": 0.0},
     "egg":  {"w": 16.0, "h": 20.0, "speed": 3.5, "gravity": EGG_G},
     "fire": {"w": 26.0, "h": 26.0, "speed": 6.0, "gravity": 0.0},
+    "nut":  {"w": 18.0, "h": 20.0, "speed": 7.0, "gravity": 0.0},  # thrown in a straight horizontal line
 }
 
 var kind := "gas"
@@ -38,6 +40,8 @@ func setup(shot_kind: String, px: float, py: float, aim: Vector2) -> void:
     if kind == "fire":
         vx = aim.x * speed
         vy = aim.y * speed
+    elif kind == "nut":  # straight and level, in front of the thrower, like the gas cloud
+        vx = -speed
     else:
         vx = -speed
     place(px - w / 2.0, py - h / 2.0)
@@ -51,7 +55,7 @@ func update(delta: float) -> void:
     y += vy * ts
     if x + w < -20.0 or x > Cfg.SCREEN_W + 100.0 or y > Cfg.SCREEN_H or y + h < -100.0:
         active = false
-    elif kind == "egg" and y + h >= Cfg.SOIL_Y:
+    elif (kind == "egg" or kind == "nut") and y + h >= Cfg.SOIL_Y:
         active = false  # splat
     sync()
     queue_redraw()
@@ -65,6 +69,10 @@ func _draw() -> void:
             draw_circle(c + Vector2(-8, 2), 11.0 + puff * 2.0, Color(0.55, 0.8, 0.25, 0.55))
             draw_circle(c + Vector2(6, -3), 12.0 - puff * 2.0, Color(0.45, 0.72, 0.2, 0.6))
             draw_circle(c + Vector2(2, 6), 9.0, Color(0.7, 0.9, 0.35, 0.5))
+        "nut":
+            draw_set_transform_matrix(Transform2D(age * 9.0, c).translated_local(-c))  # spins around its middle
+            Shot.draw_acorn(self, w, h, Color8(196, 142, 60), Color8(110, 70, 30))
+            draw_set_transform_matrix(Transform2D.IDENTITY)
         "egg":
             Shot.fill_ellipse(self, c, w / 2.0, h / 2.0, Color8(245, 235, 200))
             draw_arc(c, w / 2.0, 0.0, TAU, 16, Color8(150, 130, 90), 1.5)

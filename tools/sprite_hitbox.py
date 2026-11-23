@@ -2,7 +2,7 @@
 """Prints the collision box (fractions of the sprite) for an enemy made of one
 or more animation frames, ready to paste into Enemy.KINDS as `"hit": Rect2(...)`.
 
-    python3 tools/sprite_hitbox.py hedgehog1 hedgehog2 hedgehog_ball
+    python3 tools/sprite_hitbox.py raccoon_1 raccoon_2
 
 Thin protrusions (a tail, antennae, spikes) are ignored: a row/column only
 counts when at least 15% of the sprite is opaque in it, and the box is the

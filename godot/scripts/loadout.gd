@@ -8,6 +8,7 @@ var owned: Array[String] = ["acorn"]
 var equipped := "acorn"
 var ammo_level := 0  # extra starting acorns bought in the shop
 var stock := {}      # consumable weapons (id -> throws left), bought in packs
+var carried_acorns := Weapons.START_AMMO  # acorns left at the end of a run: they carry over to the next one
 var fists := 0       # Matrix Fist charges in the bag (each use consumes one)
 var lives := Weapons.START_LIVES
 
@@ -89,6 +90,12 @@ func buy_fist() -> bool:
     coins -= Weapons.FIST_PRICE
     fists += Weapons.FIST_PACK
     return true
+
+
+## Acorns to begin a run with: what you kept from the last one, but never fewer than
+## the start amount (3, +1 per Bigger Pouch level) so a run never starts empty-handed.
+func acorns_for_next_run() -> int:
+    return maxi(carried_acorns, start_ammo())
 
 
 func start_ammo() -> int:

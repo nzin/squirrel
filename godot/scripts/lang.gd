@@ -73,7 +73,7 @@ const FR := {
     "Pack of 3 uses (key F): slow-motion dash across the screen, punching everything for 3 damage.": "Lot de 3 usages (touche F) : ruée au ralenti à travers l'écran, tout est frappé pour 3 dégâts.",
     "owned": "possédés",
     "Bigger Pouch (+1 start acorn)": "Grande bourse (+1 gland)",
-    "Start every run with %d acorns (level %d/%d).": "Chaque manche commence avec %d glands (niveau %d/%d).",
+    "You keep your acorns between runs, and never start one with fewer than %d (level %d/%d).": "Vous gardez vos glands d'une manche à l'autre, et n'en commencez jamais une avec moins de %d (niveau %d/%d).",
     "Costs 1 acorn per throw.": "Coûte 1 gland par lancer.",
     "Costs %d acorns per throw.": "Coûte %d glands par lancer.",
     # weapons
