@@ -381,6 +381,21 @@ func _initialize() -> void:
     check(contact_nut.exploding and contact_nut.active and not v1.defeated, "a chestnut that hits an enemy explodes instead of vanishing")
     game._update_shots()
     check(v1.defeated and v2.defeated and not v3.defeated, "the explosion hurts everything close by, and only that")
+    game.new_game()
+    _quiet(game)
+    var tough1 := Enemy.create("beaver", 400.0, 420.0)
+    var tough2 := Enemy.create("beaver", 450.0, 420.0)
+    var tough_far := Enemy.create("beaver", 700.0, 420.0)
+    for en in [tough1, tough2, tough_far]:
+        en.hp = 5
+        en.max_hp = 5
+        game.layers["ground"].add_child(en)
+        game.enemies.append(en)
+    var dmg_nut := Shot.create("chestnut", 410.0, 470.0)
+    game._add_shot(dmg_nut)
+    dmg_nut.detonate()
+    game._update_shots()
+    check(dmg_nut.damage == 2 and tough1.hp == 3 and tough2.hp == 3 and tough_far.hp == 5, "the chestnut explosion deals 2 damage to each opponent close by (hp %d, %d), none far away (%d)" % [tough1.hp, tough2.hp, tough_far.hp])
     var shielded := Enemy.create("beaver", 300.0, 420.0)
     shielded.shielded = true
     game.layers["ground"].add_child(shielded)
