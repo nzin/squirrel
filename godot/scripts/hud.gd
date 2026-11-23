@@ -10,6 +10,7 @@ const CONTROLS := [
     "SHIFT - Throw weapon",
     "Q - Switch weapon",
     "F - Matrix Fist (slow-motion punch)",
+    "D - Throw an exploding chestnut",
     "ESC - Pause menu",
     "",
     "Survive 60 s per run. A boss waits every 3rd run!",
@@ -30,6 +31,9 @@ var coin_icon: CoinIcon
 var weapon_label: Label
 var fist_icon: FistIcon
 var fist_label: Label
+var chestnut_icon: ChestnutIcon
+var chestnut_label: Label
+var flash_rect: ColorRect
 var matrix_tint: ColorRect
 var matrix_dim: ColorRect
 var life_icons: Array[TextureRect] = []
@@ -78,7 +82,9 @@ func _ready() -> void:
     fist_icon = FistIcon.new(26.0)
     fist_icon.position = Vector2(10, 102)
     fist_label = _label("", 24, Color.BLACK, 42, 102, HORIZONTAL_ALIGNMENT_LEFT, 200)
-    for n: Node in [score_label, acorn_label, coin_label, coin_icon, weapon_label, run_label, fist_icon, fist_label]:
+    chestnut_icon = ChestnutIcon.new(26.0)
+    chestnut_label = _label("", 24, Color.BLACK, 42, 130, HORIZONTAL_ALIGNMENT_LEFT, 200)
+    for n: Node in [score_label, acorn_label, coin_label, coin_icon, weapon_label, run_label, fist_icon, fist_label, chestnut_icon, chestnut_label]:
         add_child(n)
     # one small squirrel per life
     for i in Weapons.MAX_LIVES:
@@ -128,6 +134,8 @@ func _ready() -> void:
     menu_root = Control.new()
     add_child(menu_root)
 
+    flash_rect = _rect(Color(1, 1, 1, 0), 0, 0, Cfg.SCREEN_W, Cfg.SCREEN_H)  # explosion flash
+    add_child(flash_rect)
     fade_rect = _rect(Color(0, 0, 0, 0), 0, 0, Cfg.SCREEN_W, Cfg.SCREEN_H)  # topmost
     add_child(fade_rect)
 
@@ -147,10 +155,15 @@ func refresh(st: Dictionary) -> void:
     var font := coin_label.get_theme_font("font")
     var text_w := font.get_string_size(coin_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
     coin_icon.position = Vector2(Cfg.SCREEN_W - 10.0 - text_w - 30.0, 47.0)
-    if st["weapon_stock"] >= 0:  # a consumable weapon shows how many are left
-        weapon_label.text = Lang.t("%s (x%d)  [Q]", [Lang.t(st["weapon"]), st["weapon_stock"]])
-    else:
-        weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
+    weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
+    var chestnuts: int = st["chestnuts"]
+    chestnut_icon.visible = in_run and chestnuts > 0 and not in_shop
+    chestnut_label.visible = chestnut_icon.visible
+    chestnut_label.text = "x%d  [D]" % chestnuts
+    var row_y := 102.0 if st["fists"] == 0 else 130.0  # sits under the fist row when there is one
+    chestnut_icon.position = Vector2(10, row_y)
+    chestnut_label.position = Vector2(42, row_y)
+    flash_rect.color.a = st["flash"]
 
     var fists: int = st["fists"]
     fist_icon.visible = in_run and fists > 0 and not in_shop
@@ -167,7 +180,7 @@ func refresh(st: Dictionary) -> void:
     bar_bottom.position.y = Cfg.SCREEN_H - LETTERBOX * m
     # black HUD text would vanish on the black cinematic bars
     var ink := Color.WHITE if m > 0.35 else Color.BLACK
-    for l: Label in [score_label, acorn_label, weapon_label, run_label, fist_label]:
+    for l: Label in [score_label, acorn_label, weapon_label, run_label, fist_label, chestnut_label]:
         l.add_theme_color_override("font_color", ink)
 
     run_label.visible = in_run

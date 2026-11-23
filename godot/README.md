@@ -10,7 +10,7 @@ Open this folder in the Godot 4 editor and press F5, or:
 /Applications/Godot.app/Contents/MacOS/Godot --path godot
 ```
 
-Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weapon, **Esc** pause menu (continue / restart / language / controls / quit). Menus: Up/Down, Enter, Left/Right changes the language.
+Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weapon, **D** throw an exploding chestnut, **F** Matrix Fist, **Esc** pause menu (continue / restart / language / controls / quit). Menus: Up/Down, Enter, Left/Right changes the language.
 
 ## Game flow
 
@@ -27,7 +27,7 @@ A *game* is a series of **runs**:
 - **Coins** (gold coin counter, top right): skunk/bird 3, beaver/mole 5, croco 6, pterodactyl 8, bosses 40-80; `?` boxes 2, rainbow acorns 5, smashed trees 2, plus the run bonus.
 - **Lives** are earned by defeating a boss (+1), by finding the rare **1UP heart** on the top cloud row (+1, or 10 coins at the maximum), or in the shop (*Extra Life*, 60 coins). Maximum 6.
 - **Shop** (between runs, kept by a dwarf who describes each ware in a speech bubble and cheers when you buy): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
-- Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes with area damage; sold in packs of 10 and uses no acorns), Pinecone Bomb, Rainbow Beam, Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn.
+- Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes with area damage; sold in packs of 10, thrown with the **D** key like the Matrix Fist is on **F**, and uses no acorns), Pinecone Bomb (a burst along the ground when it lands, a mushroom cloud when it hits something), Rainbow Beam, Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn. Every explosion starts with a brief white flash of the whole screen.
 - You can stand on trees and on opponents; collision boxes follow the visible part of each sprite (`hitbox` fractions in `enemy.gd` / `tree_prop.gd`, measured from the art).
 
 ### Matrix Fist (key F)

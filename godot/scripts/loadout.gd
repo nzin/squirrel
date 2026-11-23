@@ -37,7 +37,6 @@ func buy_weapon(id: String) -> bool:
     if def.has("stock"):
         coins -= price
         stock[id] = int(stock.get(id, 0)) + int(def["stock"])
-        equipped = id
         return true
     if owns(id):
         return false

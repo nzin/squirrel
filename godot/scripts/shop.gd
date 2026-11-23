@@ -20,7 +20,7 @@ static func rows(p: Loadout, next_run: int, next_is_boss: bool) -> Array[Diction
             out.append({
                 "id": id, "name": pack_name if left <= 0 else "%s %s" % [pack_name, Lang.t("(%d left)", [left])],
                 "status": Lang.t("%d coins", [d["price"]]),
-                "detail": "%s  %s" % [Lang.t(d["desc"]), Lang.t("Sold in packs of %d; uses no acorns.", [d["stock"]])],
+                "detail": "%s  %s" % [Lang.t(d["desc"]), Lang.t("Sold in packs of %d; press D to throw one (no acorn needed).", [d["stock"]])],
             })
             continue
         var status: String

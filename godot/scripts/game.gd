@@ -16,6 +16,8 @@ const RUN_BONUS_PER_RUN := 5 # completion bonus = this x run number (coins)
 const COMPLETE_DELAY := 1.8  # "RUN COMPLETE" banner time before the fade
 const RESPAWN_DELAY := 1.4   # seconds lying down before getting back up (lives left)
 const INVULN_TIME := 2.5     # blinking invulnerability after a respawn
+const FLASH_TIME := 0.22     # the white flash at the start of an explosion
+const FLASH_STRENGTH := 0.65
 const FADE_TIME := 0.45
 const ANNOUNCE_TIME := 2.0
 
@@ -124,6 +126,7 @@ var menu_selection := 0
 var shop_selection := 0
 var shop_message := ""
 var shop_mood := "idle"        # the dwarf: "idle" | "happy" (after a purchase)
+var flash := 0.0               # 1 = just exploded: the screen flashes white, then fades back
 var fade := 0.0                # 0 = clear, 1 = black
 var fade_dir := 0              # +1 fading out, -1 fading in, 0 idle
 var _fade_action := Callable()
@@ -185,6 +188,7 @@ func _setup_input() -> void:
     _add_key_action("jump", KEY_SPACE)
     _add_key_action("throw", KEY_SHIFT)
     _add_key_action("weapon", KEY_Q)
+    _add_key_action("chestnut", KEY_D)
     _add_key_action("fist", KEY_F)
 
 
@@ -387,14 +391,9 @@ func do_jump() -> void:
 
 func do_throw() -> void:
     var id := weapon
-    # a consumable weapon (the exploding chestnut) spends its own stock, not acorns
-    var uses_stock := false
     if Weapons.DEFS[id].has("stock"):
-        if loadout.stock_left(id) > 0:
-            uses_stock = true
-        else:
-            id = "acorn"  # out of chestnuts: back to plain acorns
-    var cost: int = 0 if uses_stock else Weapons.DEFS[id]["ammo"]
+        id = "acorn"  # consumables (the exploding chestnut) have their own key, D
+    var cost: int = Weapons.DEFS[id]["ammo"]
     if acorns < cost:
         # not enough ammo for the fancy weapon: fall back to a plain acorn
         id = "acorn"
@@ -402,11 +401,6 @@ func do_throw() -> void:
         if acorns < cost:
             return
     acorns -= cost
-    if uses_stock:
-        loadout.stock[id] = loadout.stock_left(id) - 1
-        if loadout.stock_left(id) <= 0:  # that was the last one
-            weapon = "acorn"
-            loadout.equip("acorn")
     audio.sfx("throw_" + id)
     var sx := squirrel.x + squirrel.w
     var sy := squirrel.y + int(squirrel.h / 2.0)
@@ -418,6 +412,16 @@ func do_throw() -> void:
             _add_shot(Shot.create(id, sx, sy))
 
 
+## D: throw one exploding chestnut from the stock (no acorn is spent). False when there is none.
+func throw_chestnut() -> bool:
+    if loadout.stock_left("chestnut") <= 0 or squirrel.game_over or phase != "run" or paused:
+        return false
+    loadout.stock["chestnut"] = loadout.stock_left("chestnut") - 1
+    audio.sfx("throw_chestnut")
+    _add_shot(Shot.create("chestnut", squirrel.x + squirrel.w, squirrel.y + int(squirrel.h / 2.0)))
+    return true
+
+
 func _add_shot(s: Shot) -> void:
     layers["shots"].add_child(s)
     shots.append(s)
@@ -427,7 +431,7 @@ func _add_shot(s: Shot) -> void:
 func cycle_weapon() -> void:
     var owned: Array[String] = []
     for id in Weapons.ORDER:
-        if loadout.owns(id):
+        if loadout.owns(id) and not Weapons.DEFS[id].has("stock"):  # consumables have their own key
             owned.append(id)
     weapon = owned[(owned.find(weapon) + 1) % owned.size()]
     loadout.equip(weapon)
@@ -454,6 +458,8 @@ func _input(event: InputEvent) -> void:
             do_throw()
         elif event.is_action_pressed("weapon"):
             cycle_weapon()
+        elif event.is_action_pressed("chestnut"):
+            throw_chestnut()
         elif event.is_action_pressed("fist"):
             use_fist()
 
@@ -798,6 +804,7 @@ func _update_audio() -> void:
 
 func frame(delta: float) -> void:
     _update_fade(delta)
+    flash = maxf(0.0, flash - delta / FLASH_TIME)  # real time, so it is as brief in slow motion
     _update_audio()
     # frozen: paused, between runs, or while the screen is fading in/out
     if paused or phase != "run" or fade_dir != 0:
@@ -979,7 +986,7 @@ func _hud_state() -> Dictionary:
     var boss_alive := boss != null and not boss.defeated and boss.active
     return {
         "score": score, "acorns": acorns, "coins": loadout.coins, "best": profile.best_score,
-        "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"], "weapon_stock": loadout.stock_left(weapon),
+        "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"], "chestnuts": loadout.stock_left("chestnut"),
         "run": run, "in_run": phase == "run",
         "fists": loadout.fists, "lives": loadout.lives,
         "matrix": clampf((1.0 - Cfg.time_scale) / (1.0 - FIST_SLOW), 0.0, 1.0),
@@ -987,7 +994,7 @@ func _hud_state() -> Dictionary:
         "is_boss_run": is_boss_run(run),
         "boss_hp": boss.hp if boss_alive else 0, "boss_max": boss.max_hp if boss != null else 0,
         "banner_text": banner_text, "banner_color": banner_color,
-        "show_menu": show_menu, "fade": fade,
+        "show_menu": show_menu, "fade": fade, "flash": flash * FLASH_STRENGTH,
         "menu_state": menu_state, "selection": menu_selection,
         "menu_items": menu_items().map(func(i: Dictionary) -> String: return i["text"]),
         "shop_rows": _shop_rows() if phase == "shop" else [], "shop_selection": shop_selection,
@@ -1231,6 +1238,7 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
 
 func _blast(sh: Shot) -> void:
     audio.sfx("boom")
+    flash = 1.0  # every explosion starts with a white flash of the whole screen
     var c := sh.blast_center()
     for e: Enemy in enemies:
         if e.hittable() and e.rect().get_center().distance_to(c) <= sh.blast_radius + minf(e.w, e.h) / 2.0:

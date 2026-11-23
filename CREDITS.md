@@ -78,6 +78,8 @@ without it.
 |---|---|---|
 | `private/shopkeeper.png` | the shop owner | the original dwarf |
 | `private/explosion_1..9.png` | the Exploding Chestnut's explosion animation (9 frames, an orange cartoon blast with a shockwave ring and debris) | the plain orange burst |
+| `private/mushroom_1..10.png` | the Pinecone Bomb's explosion when it hits something in the air (a rising mushroom cloud, 10 frames); also the chestnut's fallback | a plain white ring |
+| `private/groundburst_1..9.png` | the Pinecone Bomb's explosion when it lands (a burst spreading along the ground, 9 frames) | the mushroom cloud, else the ring |
 | `private/bee_1..4.png` | the bee swarm: a cartoon bumblebee, 4 flapping frames | the small synthesized bee |
 | `private/boar_1..3.png` | the second boss (run 6, 12, ...) with a cleaver-wielding boar, 3 frames for a pseudo animation | a giant croco |
 
