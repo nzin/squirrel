@@ -6,7 +6,7 @@ extends RefCounted
 var coins := 0
 var owned: Array[String] = ["acorn"]
 var equipped := "acorn"
-var ammo_level := 0  # extra starting acorns bought in the shop
+var health_level := 0  # "More health" levels bought in the shop: each life starts with that many extra health points
 var stock := {}      # consumable weapons (id -> throws left), bought in packs
 var carried_acorns := Weapons.START_AMMO  # acorns left at the end of a run: they carry over to the next one
 var fists := 0       # Matrix Fist charges in the bag (each use consumes one)
@@ -65,19 +65,24 @@ func stock_left(id: String) -> int:
     return int(stock.get(id, 0)) if Weapons.DEFS[id].has("stock") else -1
 
 
-## Price of the next "+1 starting acorn" level, or -1 when maxed out.
-func ammo_upgrade_price() -> int:
-    if ammo_level >= Weapons.AMMO_UPGRADE_PRICES.size():
+## Health points every life starts with (1, +1 per "More health" level).
+func max_health() -> int:
+    return Weapons.START_HEALTH + health_level
+
+
+## Price of the next "More health" level, or -1 when maxed out.
+func health_upgrade_price() -> int:
+    if health_level >= Weapons.HEALTH_UPGRADE_PRICES.size():
         return -1
-    return Weapons.AMMO_UPGRADE_PRICES[ammo_level]
+    return Weapons.HEALTH_UPGRADE_PRICES[health_level]
 
 
-func buy_ammo_upgrade() -> bool:
-    var price := ammo_upgrade_price()
+func buy_health() -> bool:
+    var price := health_upgrade_price()
     if price < 0 or coins < price:
         return false
     coins -= price
-    ammo_level += 1
+    health_level += 1
     return true
 
 
@@ -115,10 +120,10 @@ func buy_armor() -> bool:
 
 
 ## Acorns to begin a run with: what you kept from the last one, but never fewer than
-## the start amount (3, +1 per Bigger Pouch level) so a run never starts empty-handed.
+## the start amount (3) so a run never starts empty-handed.
 func acorns_for_next_run() -> int:
     return maxi(carried_acorns, start_ammo())
 
 
 func start_ammo() -> int:
-    return Weapons.START_AMMO + ammo_level
+    return Weapons.START_AMMO

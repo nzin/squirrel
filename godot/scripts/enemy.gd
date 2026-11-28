@@ -18,8 +18,7 @@ extends Entity
 ## Kinds marked "private_only" (bee, owl, raccoon) use licensed local-only art: see is_available().
 ## (owl and bee use `wave` with their own "wave_amp" / "wave_freq": a slow wide
 ## swoop and a fast jittery zigzag)
-## Protection: `shielded` blocks shots from the front (not bombs, or a
-## returning boomerang); extra hp from armor in later runs; `enraged` below
+## Extra hp from armor in later runs; `enraged` below
 ## half hp (faster, from run 4 only). Shooting ("shoot": gas / fire) only from `shoot_from`.
 ## All movement is multiplied by Cfg.time_scale so slow motion stays smooth.
 
@@ -36,14 +35,14 @@ const KINDS := {
         "w": 90.0, "h": 40.0, "air": false, "hp": 2,
         "frames": ["beaver1.png", "beaver2.png", "beaver3.png"],
         "interval": 0.25, "random_frames": false, "forward": -2.0, "fall_vx": -2.5,
-        "ai": "charge", "can_shield": true,
+        "ai": "charge",
     },
     "croco": {
         "hit": Rect2(0.07, 0.42, 0.86, 0.57), "coins": 6,
         "w": 80.0, "h": 80.0, "air": false, "hp": 2,
         "frames": ["croco1.png", "croco2.png", "croco3.png"],
         "interval": 0.75, "random_frames": true, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "hop", "can_shield": true,
+        "ai": "hop",
     },
     "mole": {
         "hit": Rect2(0.10, 0.34, 0.84, 0.66), "coins": 5,
@@ -73,7 +72,7 @@ const KINDS := {
         "w": 100.0, "h": 75.0, "air": false, "hp": 2,
         "frames": [], "private_only": true,
         "interval": 0.13, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "throw", "can_shield": true,
+        "ai": "throw",
         "private": {
             "frames": ["res://private/raccoon_1.png", "res://private/raccoon_2.png", "res://private/raccoon_3.png",
                 "res://private/raccoon_4.png", "res://private/raccoon_5.png", "res://private/raccoon_6.png",
@@ -88,7 +87,7 @@ const KINDS := {
         "w": 52.0, "h": 80.0, "air": true, "hp": 2,
         "frames": [], "private_only": true,
         "interval": 0.28, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "wave", "wave_amp": 105.0, "wave_freq": 1.5, "can_shield": true,
+        "ai": "wave", "wave_amp": 105.0, "wave_freq": 1.5,
         "private": {
             # eyes open, open, open, blink, open, open, sleepy: a blinking, drowsy owl
             "frames": ["res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_2.png",
@@ -166,7 +165,6 @@ const VIRUS_THROW_GAP := 1.7    # seconds between two throws while it stands (x0
 const BOSS_CHARGE_SPEED := 7.0
 
 const ENRAGE_FROM_RUN := 4   # no angry enemies in the first runs
-const SHIELD_FROM_RUN := 7   # no protected (shielded) enemies before this run
 const TELEGRAPH := 0.45        # warning blink before a shot / charge / dive
 const CHARGE_TRIGGER := 330.0  # beaver charges when this close
 const CHARGE_SPEED := 6.0
@@ -217,11 +215,9 @@ var fall_vy := 0.0
 
 # --- smarter behaviour ---
 var speed_mult := 1.0
-var shielded := false
 var enraged := false
 var can_enrage := false    # set by scale_for_run (run 4+)
 var flash := 0.0           # white flash after a hit (s)
-var shield_flash := 0.0
 var life := 0.0            # scaled seconds alive (drives the sine wave)
 var base_y := 0.0
 var ai := ""
@@ -303,7 +299,7 @@ func anchor() -> void:
 
 
 ## Make this enemy tougher / smarter for run `run_number` (1 = first run):
-## faster, armored (more hp), shielded, and able to shoot from `shoot_from`.
+## faster, armored (more hp), and able to shoot from `shoot_from`.
 func scale_for_run(run_number: int) -> void:
     can_enrage = run_number >= ENRAGE_FROM_RUN
     if is_boss:
@@ -312,7 +308,6 @@ func scale_for_run(run_number: int) -> void:
     hp += (run_number - 1) / 3
     max_hp = hp
     can_shoot = shoot_kind != "" and run_number >= int(cfg.get("shoot_from", 99))
-    shielded = cfg.get("can_shield", false) and run_number >= SHIELD_FROM_RUN and randf() < 0.4
 
 
 func _show_frame(i: int) -> void:
@@ -340,21 +335,12 @@ func hittable() -> bool:
     return not (kind == "mole" and underground)
 
 
-## Does the shield stop `sh`? Only shots coming from the front, and not the ones that
-## break shields (a shot with `breaks_shield`) - bombs use blast damage instead.
-func blocks(sh: Shot) -> bool:
-    if sh.breaks_shield:
-        return false
-    return shielded and sh.vx > 0.0
-
-
 ## Apply a hit. Returns true if this hit defeated it.
 func hit(damage := 1) -> bool:
     hp -= damage
     flash = 0.12
     if hp <= 0:
         defeated = true
-        shielded = false
         _apply_tint()
         queue_redraw()
         return true
@@ -383,7 +369,6 @@ func take_shot() -> String:
 func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
     life += delta
     flash = maxf(0.0, flash - delta)
-    shield_flash = maxf(0.0, shield_flash - delta)
     _blink = Color.WHITE
     if defeated:
         _update_defeated(scroll_speed)
@@ -408,7 +393,7 @@ func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
         if not ridden:  # a bird doesn't bomb its own rider
             _update_shooting(delta, target)
     _apply_tint()
-    if shielded or shield_flash > 0.0 or (max_hp > 1 and hp < max_hp):
+    if max_hp > 1 and hp < max_hp:
         queue_redraw()
     sync()
 
@@ -728,16 +713,6 @@ func _draw() -> void:
     if defeated:
         return
     var hb := Rect2(hitbox.position.x * w, hitbox.position.y * h, hitbox.size.x * w, hitbox.size.y * h)
-    if shielded:  # a shield held out in front (left side)
-        var sx := hb.position.x - 10.0
-        var top := hb.position.y - 4.0
-        var bottom := hb.end.y + 2.0
-        var mid := (top + bottom) / 2.0
-        var col := Color(0.85, 0.95, 1.0) if shield_flash > 0.0 else Color(0.45, 0.65, 0.95)
-        var pts := PackedVector2Array([Vector2(sx + 8, top), Vector2(sx, top + 8), Vector2(sx - 2, mid),
-            Vector2(sx, bottom - 8), Vector2(sx + 8, bottom), Vector2(sx + 12, mid)])
-        draw_colored_polygon(pts, col)
-        draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[4], pts[5], pts[0]]), Color(0.15, 0.25, 0.5), 2.0)
     if not is_boss and max_hp > 1 and hp < max_hp:  # little health bar once wounded
         var bw := minf(hb.size.x, 46.0)
         var bx := hb.position.x + (hb.size.x - bw) / 2.0

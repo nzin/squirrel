@@ -57,7 +57,6 @@ var vy := 0.0
 var gravity := 0.0
 var damage := 1
 var pierce := false  # survives hits instead of being consumed
-var breaks_shield := false  # ignores the frontal shield of an enemy
 var hit_ids := {}    # enemies already hit by this (piercing) shot / leg
 var origin_x := 0.0
 var returning := false

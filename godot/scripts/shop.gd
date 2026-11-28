@@ -3,7 +3,7 @@ extends RefCounted
 ## The between-runs shop: one row per weapon, the starting-acorns upgrade and a
 ## final "start next run" row. Pure functions over a Loadout (testable without UI).
 
-const AMMO_ROW := "ammo_upgrade"
+const HEALTH_ROW := "more_health"
 const FIST_ROW := "matrix_fist"
 const LIFE_ROW := "extra_life"
 const ARMOR_ROW := "diver_armor"
@@ -68,11 +68,11 @@ static func rows(p: Loadout, next_run: int, next_is_boss: bool) -> Array[Diction
         "detail": Lang.t("Lives: %d/%d. Also won from bosses and 1UP hearts.", [p.lives, Weapons.MAX_LIVES]),
         "enabled": p.lives < Weapons.MAX_LIVES and p.coins >= Weapons.LIFE_PRICE,
     })
-    var price := p.ammo_upgrade_price()
+    var price := p.health_upgrade_price()
     out.append({
-        "id": AMMO_ROW, "name": Lang.t("Bigger Pouch (+1 start acorn)"),
+        "id": HEALTH_ROW, "name": Lang.t("More health"),
         "status": Lang.t("MAX") if price < 0 else Lang.t("%d coins", [price]),
-        "detail": Lang.t("You keep your acorns between runs, and never start one with fewer than %d (level %d/%d).", [p.start_ammo(), p.ammo_level, Weapons.AMMO_UPGRADE_PRICES.size()]),
+        "detail": Lang.t("Each life starts with %d health points (level %d/%d). A hit costs 1 point.", [p.max_health(), p.health_level, Weapons.HEALTH_UPGRADE_PRICES.size()]),
         "enabled": price >= 0 and p.coins >= price,
     })
     out.append({
@@ -96,10 +96,10 @@ static func activate(p: Loadout, id: String) -> String:
         return Lang.t("Diver Armor ready for your next run!") if p.buy_armor() else Lang.t("Not enough coins.")
     if id == FIST_ROW:
         return Lang.t("Bought %s!", [Lang.t("Matrix Fist")]) if p.buy_fist() else Lang.t("Not enough coins.")
-    if id == AMMO_ROW:
-        if p.ammo_upgrade_price() < 0:
-            return Lang.t("Pouch is already at maximum.")
-        return Lang.t("Pouch upgraded!") if p.buy_ammo_upgrade() else Lang.t("Not enough coins.")
+    if id == HEALTH_ROW:
+        if p.health_upgrade_price() < 0:
+            return Lang.t("Health is already at maximum.")
+        return Lang.t("Health up!") if p.buy_health() else Lang.t("Not enough coins.")
     var wname: String = Lang.t(Weapons.DEFS[id]["name"])
     if id == "acorn":  # a refill of acorns, not a weapon to own
         return Lang.t("Bought %s!", ["%s x%d" % [wname, Weapons.ACORN_PACK]]) if p.buy_acorns() else Lang.t("Not enough coins.")

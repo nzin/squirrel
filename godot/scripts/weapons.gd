@@ -42,5 +42,7 @@ const ARMOR_HP := 30
 const START_LIVES := 3
 const MAX_LIVES := 6
 const LIFE_PRICE := 60
-## Price of each "+1 starting acorn" level; its length is the maximum level.
-const AMMO_UPGRADE_PRICES: Array[int] = [10, 25, 45, 70, 100]
+## Health points of every life at the start of a game; each "More health" level adds one.
+const START_HEALTH := 1
+## Price of each "More health" level; its length is the maximum level.
+const HEALTH_UPGRADE_PRICES: Array[int] = [10, 25, 45, 70, 100]
