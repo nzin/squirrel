@@ -17,7 +17,7 @@ Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weap
 A *game* is a series of **runs**:
 
 1. A run lasts **60 seconds** (progress line along the bottom, timer at the top). Every run is harder: faster scrolling, closer spawns, and new opponents (beavers from run 2, moles from run 3).
-2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, giant skunk, then a tougher cycle; the boar uses local-only licensed art, see `CREDITS.md` - without it a giant croco takes its place). You get extra acorns, the boss charges after a red blink telegraph, and when it is defeated it goes down in a string of big explosions (bigger than a chestnut's, with a white flash); the run ends 2 seconds later while the game keeps running.
+2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, a pink virus-lobbing monster, then a tougher cycle; the boar and the monster use local-only licensed art, see `CREDITS.md` - without it a giant croco and a giant skunk take their places). The monster (18 hp) walks in, then swings its tail to **lob viruses** that arc up and come down on you (yellow blink as the warning; jump, or shoot them down with an acorn) before it charges like the others. You get extra acorns, the boss charges after a red blink telegraph, and when it is defeated it goes down in a string of big explosions (bigger than a chestnut's, with a white flash); the run ends 2 seconds later while the game keeps running.
 3. A finished run pays a completion bonus, then the screen **fades** to the **shop**; choosing *Start run N* fades into the next run.
 4. You have **3 lives** (small squirrels under the score, max 6). A hit costs one; you get back up after a moment, blinking and invulnerable, with the obstacle that killed you cleared away. Losing the last life ends the game; *Restart* begins a new one. **Coins, weapons and upgrades reset every game**; only the best score, best run and the language are saved (`user://squirrel.cfg`).
 
@@ -76,7 +76,7 @@ The music is an original **arcade fighting-game soundtrack** (FM slap bass, FM p
 
 ## Art
 
-The bee, the owl, the raccoon, the shopkeeper, the boar boss and the explosion animations are licensed and live only in the git-ignored `godot/private/` folder: **without them the bee, the owl and the raccoon do not spawn and the shop has no figure** (everything else works). The shop figure is whatever picture is named `shopkeeper.png`, looked for in `godot/assets/` first and then in `godot/private/`. See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
+The bee, the owl, the raccoon, the shopkeeper, the boar and virus-monster bosses and the explosion animations are licensed and live only in the git-ignored `godot/private/` folder: **without them the bee, the owl and the raccoon do not spawn and the shop has no figure** (everything else works). The shop figure is whatever picture is named `shopkeeper.png`, looked for in `godot/assets/` first and then in `godot/private/`. See [`../CREDITS.md`](../CREDITS.md) for sources, licences, what is still undocumented, and how to add characters.
 
 ## Languages
 

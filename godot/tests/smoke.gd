@@ -1240,7 +1240,60 @@ func _initialize() -> void:
         var bb := Enemy.create_boss(tier, 0.0, 0.0)
         boss_kinds.append(bb.kind)
         check(bb.rect().size.y <= 125.0 and bb.hp >= 10, "boss %s (tier %d) is jumpable (%.0f px tall) and tough (%d hp)" % [bb.kind, tier, bb.rect().size.y, bb.hp])
-    check(boss_kinds == ["boss_beaver", "boss_boar", "boss_skunk", "boss_beaver", "boss_boar", "boss_skunk"], "bosses cycle beaver, boar, skunk %s" % [boss_kinds])
+    check(boss_kinds == ["boss_beaver", "boss_boar", "boss_virus", "boss_beaver", "boss_boar", "boss_virus"], "bosses cycle beaver, boar, virus monster %s" % [boss_kinds])
+    # the virus monster lobs viruses with its tail instead of spitting fire
+    var vb := Enemy.create_boss(2, 540.0, 310.0)
+    vb.boss_state = "idle"
+    vb.shoot_cd = 0.0
+    var frames_seen := {}
+    var thrown_at := -1.0
+    var t := 0.0
+    var fire_seen := false
+    var cut_short := false
+    var was_idle_throwing := false
+    for i in 200:
+        was_idle_throwing = vb.boss_state == "idle" and vb.virus_t >= 0.0
+        vb.update(3.0, dt)
+        cut_short = cut_short or (was_idle_throwing and vb.boss_state != "idle" and vb.virus_t >= 0.0)
+        t += dt
+        frames_seen[vb.frame_idx] = true
+        var shot := vb.take_shot()
+        fire_seen = fire_seen or shot == "fire"
+        if shot == "virus" and thrown_at < 0.0:
+            thrown_at = t
+    check(thrown_at > 0.5 and thrown_at < 1.2 and not fire_seen, "the virus monster throws a virus about 0.8 s into its throw (%.2f s), no fireballs" % thrown_at)
+    if vb.cfg["frames"].size() >= 9:
+        check(frames_seen.has(0) and frames_seen.has(4) and frames_seen.has(6) and frames_seen.has(8), "...playing its throwing poses (frames %s)" % [frames_seen.keys()])
+    check(not cut_short and vb.boss_state != "enter", "...and a throw is never cut short by the end of its stand (it then warns and charges)")
+    var lobbed := EnemyShot.create("virus", 600.0, 330.0, Vector2(70.0, 484.0))
+    var lob_near := 9999.0
+    var lob_apex := 9999.0
+    while lobbed.active:
+        lobbed.update(dt)
+        lob_near = minf(lob_near, absf(lobbed.rect().get_center().x - 70.0)) if lobbed.y + lobbed.h > 440.0 else lob_near
+        lob_apex = minf(lob_apex, lobbed.y)
+    check(lob_near < 25.0 and lob_apex < 330.0, "a lobbed virus arcs up and comes down on the squirrel (apex y=%.0f, %.0f px off)" % [lob_apex, lob_near])
+    game.new_game()
+    _quiet(game)
+    var flying := EnemyShot.create("virus", 600.0, 330.0, Vector2(game.squirrel.x + 20.0, game.squirrel.y + 40.0))
+    game.layers["shots"].add_child(flying)
+    game.enemy_shots.append(flying)
+    for i in 90:
+        game.frame(dt)
+        if game.squirrel.game_over:
+            break
+    check(game.squirrel.game_over, "a virus that lands on the squirrel is lethal")
+    game.new_game()
+    _quiet(game)
+    game.squirrel.velocity_y = Cfg.JUMP_STRENGTH  # jumps over it
+    var dodged := EnemyShot.create("virus", 600.0, 330.0, Vector2(game.squirrel.x + 20.0, game.squirrel.y + 40.0))
+    game.layers["shots"].add_child(dodged)
+    game.enemy_shots.append(dodged)
+    game.squirrel.y = 300.0
+    game.squirrel.velocity_y = -2.0
+    var shot_down := Shot.create("acorn", dodged.x - 5.0, dodged.y)
+    game._shot_hits_enemy_shots(shot_down)
+    check(not dodged.active, "an acorn shoots a virus down")
 
 
     print("sound")
