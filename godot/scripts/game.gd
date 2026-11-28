@@ -180,9 +180,9 @@ func _ready() -> void:
     randomize()
     profile.load_from_disk()
     _setup_input()
-    # Exported macOS app runs full screen; editor / `make run` stay windowed
-    # and the web build is sized by the browser page.
-    if OS.get_name() == "macOS" and OS.has_feature("template"):
+    # The desktop game (exported app, editor, `make run`) starts full screen; the web build is
+    # sized by the browser page (a browser only goes full screen on a user gesture).
+    if not OS.has_feature("web"):
         DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
     background = Background.new()

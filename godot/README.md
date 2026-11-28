@@ -93,7 +93,7 @@ Set the `START_AT` environment variable to begin a new game at that run (a whole
 ```bash
 make templates   # one-time: download Godot export templates (~1.3 GB)
 make web         # -> godot/build/web/   (then: make serve)
-make macos       # -> godot/build/macos/Squirrel.app (universal, runs full screen; make run-macos)
+make macos       # -> godot/build/macos/Squirrel.app (universal; make run-macos)
 ```
 
 ## Test (headless)
