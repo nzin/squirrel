@@ -58,11 +58,24 @@ const BEE_SPAWN_DISTANCE := 1700    # swarms of 3
 const RACCOON_SPAWN_DISTANCE := 2600
 const OWL_SPAWN_DISTANCE := 2800
 
-## Opponents come in three groups of three, one group per three runs (runs 1-3, 4-6, 7-9; then it
-## starts over at run 10), so a run never mixes everything. The last group is licensed local-only
-## art: without it (Enemy.is_available) the public opponents of GROUP_FALLBACK stand in.
-const GROUPS := [["skunk", "bird", "beaver"], ["mole", "croco", "ptero"], ["owl", "bee", "raccoon"]]
-const GROUP_FALLBACK := {"owl": "ptero", "bee": "beaver", "raccoon": "croco"}
+## Which opponents appear in which run. The bird is in every run and the pterodactyl in every run
+## from PTERO_FROM_RUN on; the others follow this table (index = run - 1; run 10 starts over at the
+## first line, tougher through the armor and speed scaling). The owl, the bee swarm and the raccoon
+## are licensed local-only art: without it (Enemy.is_available) the public opponents of
+## RUN_KIND_FALLBACK stand in (never twice in one run).
+const PTERO_FROM_RUN := 2
+const RUN_KINDS := [
+    ["skunk"],
+    ["skunk", "beaver"],
+    ["skunk", "beaver", "mole"],
+    ["skunk", "mole", "croco"],
+    ["skunk", "mole", "owl"],
+    ["skunk", "mole", "croco", "owl"],
+    ["skunk", "owl", "raccoon"],
+    ["skunk", "owl", "bee"],
+    ["skunk", "owl", "bee", "raccoon"],
+]
+const RUN_KIND_FALLBACK := {"owl": "ptero", "bee": "beaver", "raccoon": "croco"}
 
 const LAYERS := ["trees", "ground", "air", "clouds", "rainbow", "boxes", "popups", "player", "shots"]
 
@@ -233,9 +246,13 @@ func new_game() -> void:
 static func kinds_for_run(run_number: int, available := Callable()) -> Array[String]:
     if not available.is_valid():
         available = Enemy.is_available
-    var out: Array[String] = []
-    for k: String in GROUPS[((run_number - 1) / BOSS_EVERY) % GROUPS.size()]:
-        out.append(k if available.call(k) else GROUP_FALLBACK.get(k, k))
+    var out: Array[String] = ["bird"]
+    if run_number >= PTERO_FROM_RUN:
+        out.append("ptero")
+    for k: String in RUN_KINDS[(run_number - 1) % RUN_KINDS.size()]:
+        var kind: String = k if available.call(k) else RUN_KIND_FALLBACK.get(k, k)
+        if not out.has(kind):
+            out.append(kind)
     return out
 
 

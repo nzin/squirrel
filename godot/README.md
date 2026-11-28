@@ -16,7 +16,7 @@ Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weap
 
 A *game* is a series of **runs**:
 
-1. A run lasts **60 seconds** (progress line along the bottom, timer at the top). Every run is harder: faster scrolling, closer spawns, and a new group of opponents every three runs (see below).
+1. A run lasts **60 seconds** (progress line along the bottom, timer at the top). Every run is harder: faster scrolling, closer spawns, and a different cast of opponents (see below).
 2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, a pink virus-lobbing monster, then a tougher cycle; the boar and the monster use local-only licensed art, see `CREDITS.md` - without it a giant croco and a giant skunk take their places). The monster (18 hp) walks in, then swings its tail to **lob viruses** that arc up and come down on you (yellow blink as the warning; jump, or shoot them down with an acorn) before it charges like the others. You get extra acorns, the boss charges after a red blink telegraph, and when it is defeated it goes down in a string of big explosions (bigger than a chestnut's, with a white flash); the run ends 2 seconds later while the game keeps running.
 3. A finished run pays a completion bonus, then the screen **fades** to the **shop**; choosing *Next run* fades into the next run (the shop never shows a run number; to begin a game at a later run use `START_AT`, see below).
 4. You have **3 lives** (small squirrels under the score, max 6). A hit costs one; you get back up after a moment, blinking and invulnerable, with the obstacle that killed you cleared away. Losing the last life ends the game; *Restart* begins a new one. **Coins, weapons and upgrades reset every game**; only the best score, best run and the language are saved (`user://squirrel.cfg`).
@@ -48,17 +48,17 @@ Data-driven in `scripts/enemy.gd` (`ai`, `shoot`, `shoot_from` in `KINDS`); each
 
 | Enemy | Movement | Runs | Shoots (from run) |
 |---|---|---|---|
-| Skunk | walks | 1-3 | gas cloud rolling on the ground (3) |
-| Bird | sine wave | 1-3 | never shoots |
-| Pterodactyl | blinks, then **dives** at you | 4-6 (on clouds) | fireballs (5) |
-| Beaver | blinks, then **charges** | 1-3 | - |
-| Mole | **tunnels toward you**, surfaces just ahead | 4-6 | - |
-| Croco | **leaps** | 4-6 | - |
-| Owl *(local art only)* | slow wide **swoops**, blinking | 7-9 | - |
-| Bee *(local art only)* | fast **zigzag**, in swarms of 3 | 7-9 | - |
-| Raccoon *(local art only)* | prowls, stands up and **throws nuts** at you (a lob), eats, walks on | 7-9 | nuts |
+| Skunk | walks | all runs | gas cloud rolling on the ground (3) |
+| Bird | sine wave | all runs | never shoots |
+| Pterodactyl | blinks, then **dives** at you | 2+ (on clouds) | fireballs (5) |
+| Beaver | blinks, then **charges** | 2-3 | - |
+| Mole | **tunnels toward you**, surfaces just ahead | 3-6 | - |
+| Croco | **leaps** | 4, 6 | - |
+| Owl *(local art only)* | slow wide **swoops**, blinking | 5-9 | - |
+| Bee *(local art only)* | fast **zigzag**, in swarms of 3 | 8-9 | - |
+| Raccoon *(local art only)* | prowls, stands up and **throws nuts** at you (a lob), eats, walks on | 7, 9 | nuts |
 
-Opponents come in **three groups of three, one group per three runs**, so a run never mixes everything: runs **1-3** skunk, bird, beaver; runs **4-6** mole, croco, pterodactyl; runs **7-9** owl, bee swarm, raccoon (`Game.GROUPS`). From run 10 the groups start over (tougher through the armor and speed scaling). The last group needs its local art: without it the owl, bee and raccoon are replaced by the pterodactyl, beaver and croco (`Game.GROUP_FALLBACK`). Spawns get denser inside a group and ease off for the next one.
+Each run has its own cast (`Game.RUN_KINDS`): the **bird is in every run** and the **pterodactyl in every run from 2**, plus: run 1 skunk only; 2 skunk + beaver; 3 skunk + beaver + mole; 4 skunk + mole + croco; 5 skunk + mole + owl; 6 skunk + mole + croco + owl; 7 skunk + owl + raccoon; 8 skunk + owl + bee swarm; 9 skunk + owl + bee swarm + raccoon. From run 10 the casts start over (tougher through the armor and speed scaling; the pterodactyl stays). The owl, bee and raccoon need their local art: without it they are replaced by the pterodactyl, beaver and croco (`Game.RUN_KIND_FALLBACK`, never twice in a run). Spawns get denser over three runs, then ease off.
 
 There are no shielded opponents: every shot hurts whatever side it comes from.
 

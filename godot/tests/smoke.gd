@@ -692,7 +692,7 @@ func _initialize() -> void:
     for k: String in ["bee", "owl", "raccoon"]:
         if not Enemy.is_available(k):
             game.new_game()
-            game.run = 8  # (the run of the last group, where owl, bee and raccoon belong)
+            game.run = 9  # (the run with the owl, the bee swarm and the raccoon)
             game.start_run()
             _quiet(game)
             game.set("next_" + k, 0.0)
@@ -701,9 +701,9 @@ func _initialize() -> void:
             check(game.enemies.filter(func(e: Enemy) -> bool: return e.kind == k).is_empty(), "%s: no art installed -> never spawned (and no crash)" % k)
     var roster := []
     if art_kinds.has("owl"):
-        roster.append(["owl", 7, 1])
+        roster.append(["owl", 5, 1])
     if art_kinds.has("bee"):
-        roster.append(["bee", 7, 3])
+        roster.append(["bee", 8, 3])
     if art_kinds.has("raccoon"):
         roster.append(["raccoon", 7, 1])
     for entry in roster:
@@ -1139,21 +1139,35 @@ func _initialize() -> void:
     game.new_game()
     check(game.run == 1, "...and unsetting it brings run 1 back")
 
-    print("opponent groups")
-    var none_avail := func(_k: String) -> bool: return false
-    var all_avail := func(_k: String) -> bool: return true
-    var g1: Array[String] = ["skunk", "bird", "beaver"]
-    var g2: Array[String] = ["mole", "croco", "ptero"]
-    var g3: Array[String] = ["owl", "bee", "raccoon"]
-    for r in [1, 2, 3, 10, 11, 12, 19]:
-        check(Game.kinds_for_run(r, all_avail) == g1, "run %d: skunk, bird, beaver" % r)
-    for r in [4, 5, 6, 13, 14, 15]:
-        check(Game.kinds_for_run(r, all_avail) == g2, "run %d: mole, croco, pterodactyl" % r)
-    for r in [7, 8, 9, 16, 17, 18]:
-        check(Game.kinds_for_run(r, all_avail) == g3, "run %d: owl, bee swarm, raccoon" % r)
-    var g3_fallback: Array[String] = ["ptero", "beaver", "croco"]
-    check(Game.kinds_for_run(8, none_avail) == g3_fallback and Game.kinds_for_run(2, none_avail) == g1, "without the local art the last group falls back to public opponents (pterodactyl, beaver, croco)")
-    check(Game.kinds_for_run(5) == g2 and Game.kinds_for_run(1) == g1, "the default asks Enemy.is_available")
+    print("opponents per run")
+    var opk_none_avail := func(_k: String) -> bool: return false
+    var opk_all_avail := func(_k: String) -> bool: return true
+    var opk_by_run := {  # the table of the design (the bird is everywhere, the pterodactyl from run 2)
+        1: ["skunk"], 2: ["skunk", "beaver"], 3: ["skunk", "beaver", "mole"], 4: ["skunk", "mole", "croco"],
+        5: ["skunk", "mole", "owl"], 6: ["skunk", "mole", "croco", "owl"], 7: ["skunk", "owl", "raccoon"],
+        8: ["skunk", "owl", "bee"], 9: ["skunk", "owl", "bee", "raccoon"],
+    }
+    for r: int in opk_by_run:
+        var opk_want: Array = opk_by_run[r].duplicate()
+        opk_want.append("bird")
+        if r >= 2:
+            opk_want.append("ptero")
+        var opk_got: Array = Game.kinds_for_run(r, opk_all_avail)
+        opk_want.sort()
+        opk_got.sort()
+        check(opk_got == opk_want, "run %d: %s" % [r, opk_want])
+        var opk_again: Array = Game.kinds_for_run(r + 9, opk_all_avail)
+        opk_again.sort()
+        check(opk_again == opk_want or (r == 1 and opk_again.size() == opk_want.size() + 1), "run %d starts over like run %d (the pterodactyl is there from run 2)" % [r + 9, r])
+    check(Game.kinds_for_run(1, opk_all_avail).has("bird") and not Game.kinds_for_run(1, opk_all_avail).has("ptero") and Game.kinds_for_run(2, opk_all_avail).has("ptero"), "bird in every run, pterodactyl from run 2")
+    var opk_fb7: Array = Game.kinds_for_run(7, opk_none_avail)
+    var opk_fb9: Array = Game.kinds_for_run(9, opk_none_avail)
+    opk_fb7.sort()
+    opk_fb9.sort()
+    check(opk_fb7 == ["bird", "croco", "ptero", "skunk"] and opk_fb9 == ["beaver", "bird", "croco", "ptero", "skunk"], "without the local art the missing ones are replaced (owl by pterodactyl, bee by beaver, raccoon by croco), never twice: %s %s" % [opk_fb7, opk_fb9])
+    var opk_plain: Array = Game.kinds_for_run(4)
+    opk_plain.sort()
+    check(opk_plain == ["bird", "croco", "mole", "ptero", "skunk"], "the default asks Enemy.is_available (the public ones are always there)")
     # what really spawns in a run: only that run's kinds (the spawn timers are driven by hand)
     for r in range(1, 10):
         game.new_game()
@@ -1183,7 +1197,7 @@ func _initialize() -> void:
     var gap3: float = game.gap_factor
     game.run = 4
     game.start_run()
-    check(gap1 == 1.0 and gap3 < gap1 and is_equal_approx(game.gap_factor, 1.0), "spawns get denser inside a group of three runs, and ease off for the next group")
+    check(gap1 == 1.0 and gap3 < gap1 and is_equal_approx(game.gap_factor, 1.0), "spawns get denser over three runs, then ease off")
 
     print("Diver Armor")
     game.new_game()
