@@ -11,6 +11,7 @@ var stock := {}      # consumable weapons (id -> throws left), bought in packs
 var carried_acorns := Weapons.START_AMMO  # acorns left at the end of a run: they carry over to the next one
 var fists := 0       # Matrix Fist charges in the bag (each use consumes one)
 var lives := Weapons.START_LIVES
+var armor_ready := false  # Diver Armor bought: it is worn (and spent) by the next run
 
 
 func add_coins(n: int) -> void:
@@ -44,6 +45,18 @@ func buy_weapon(id: String) -> bool:
     coins -= price
     owned.append(id)
     equipped = id
+    return true
+
+
+## Buy a refill of Weapons.ACORN_PACK acorns for the next run (and equip the plain acorn,
+## like selecting that row always did). False when too expensive.
+func buy_acorns() -> bool:
+    var price: int = Weapons.DEFS["acorn"]["price"]
+    if coins < price:
+        return false
+    coins -= price
+    carried_acorns = acorns_for_next_run() + Weapons.ACORN_PACK
+    equipped = "acorn"
     return true
 
 
@@ -89,6 +102,15 @@ func buy_fist() -> bool:
         return false
     coins -= Weapons.FIST_PRICE
     fists += Weapons.FIST_PACK
+    return true
+
+
+## Buy the Diver Armor for the next run. False when too expensive or already waiting.
+func buy_armor() -> bool:
+    if armor_ready or coins < Weapons.ARMOR_PRICE:
+        return false
+    coins -= Weapons.ARMOR_PRICE
+    armor_ready = true
     return true
 
 

@@ -5,31 +5,39 @@ extends RefCounted
 ## entry here, a branch in Game.do_throw and a branch in Shot.setup/_draw.
 ##   price - coins in the shop       ammo - acorns spent per throw
 
-const ORDER: Array[String] = ["acorn", "spread", "boomerang", "chestnut", "pinecone", "rainbow", "homing"]
+const ORDER: Array[String] = ["acorn", "spread", "boomerang", "chestnut", "pinecone", "homing"]
 
 const DEFS := {
-    "acorn": {"name": "Acorn", "price": 0, "ammo": 1,
+    # always owned; the shop sells refills: ACORN_PACK acorns for "price" coins
+    "acorn": {"name": "Acorn", "price": 5, "ammo": 1,
         "desc": "Straight shot. Cheap and reliable."},
     "spread": {"name": "Triple Acorn", "price": 15, "ammo": 3,
         "desc": "Three acorns in a fan."},
-    "boomerang": {"name": "Boomerang", "price": 30, "ammo": 1,
+    "boomerang": {"name": "Boomerang", "price": 20, "ammo": 1,
         "desc": "Flies out and back: can hit twice."},
     # "stock": sold in packs of 10 chestnuts, each throw uses one chestnut instead of an acorn
-    "chestnut": {"name": "Exploding Chestnut", "price": 50, "ammo": 1, "stock": 10,
+    "chestnut": {"name": "Exploding Chestnut", "price": 35, "ammo": 1, "stock": 10,
         "desc": "Bounces, then explodes: 2 damage to every opponent close by."},
-    "pinecone": {"name": "Pinecone Bomb", "price": 80, "ammo": 2,
+    "pinecone": {"name": "Pinecone Bomb", "price": 50, "ammo": 2,
         "desc": "Slow lob that explodes: area damage."},
-    "rainbow": {"name": "Rainbow Beam", "price": 120, "ammo": 3,
-        "desc": "Fast, hits hard, pierces every enemy in line."},
-    "homing": {"name": "Homing Acorn", "price": 180, "ammo": 2,
+    "homing": {"name": "Homing Acorn", "price": 80, "ammo": 2,
         "desc": "Steers toward the nearest enemy."},
+    # not in ORDER (not sold, not selectable): what the Diver Armor throws during its run
+    "harpoon": {"name": "Harpoon", "price": 0, "ammo": 1,
+        "desc": "Straight shot from the diver's gun."},
 }
 
 const START_AMMO := 3
+## One purchase of the plain Acorn row = this many acorns (price: DEFS["acorn"]["price"]).
+const ACORN_PACK := 10
 ## Matrix Fist: a one-use consumable (each purchase = one charge), key F.
 const FIST_PRICE := 45   # one purchase = FIST_PACK charges
 const FIST_PACK := 3
 const FIST_DAMAGE := 3   # per hit; every enemy / tree on the way is hit once per leg
+## Diver Armor: a one-run purchase (ARMOR_HP health points, cannot jump, throws harpoons for the
+## whole next run). Each hit costs 1 point; at 0 the armor breaks and the run goes on without it.
+const ARMOR_PRICE := 60
+const ARMOR_HP := 30
 ## Lives: you start a game with 3 and can hold at most 6.
 const START_LIVES := 3
 const MAX_LIVES := 6

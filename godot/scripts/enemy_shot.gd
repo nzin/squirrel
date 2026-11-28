@@ -21,6 +21,7 @@ var vx := 0.0
 var vy := 0.0
 var gravity := 0.0
 var age := 0.0
+var hurt_player := false  # already cost the (armored) squirrel a health point: it hurts once, not every tick
 
 
 ## `aim` = unit direction (only used by "fire"); other kinds have a fixed path.

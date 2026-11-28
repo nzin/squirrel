@@ -74,7 +74,10 @@ without it.
 | `private/owl_1..3.png` | the owl (run 7+): eyes open, a blink and a sleepy look, shown as a blinking, drowsy owl; it swoops in slow wide waves | **none: no owls spawn** |
 | `private/bee_1..4.png` | the bee swarm (run 8+): a cartoon bumblebee, 4 flapping frames | **none: no bees spawn** |
 | `private/raccoon_1..9.png` | the raccoon (run 9+): 4 prowling frames, plus sitting up, holding a pot, raising it to throw, and eating; it throws nuts at the squirrel | **none: no raccoons spawn** |
+| `private/diver_1..5.png`, `private/diver_harpoon.png` | the Diver Armor (one-run shop item): the squirrel as an animated diver, and the harpoon it throws (made by `tools/make_diver_art.py` from five source frames kept in `misc/diver/`) | the squirrel sprite and a drawn harpoon |
 | `private/boar_1..3.png` | the second boss (run 6, 12, ...) with a cleaver-wielding boar, 3 frames for a pseudo animation | a giant croco |
+
+The diver frames were also cut out of screenshots (a flat gray background with guide lines); their pack and licence are **not recorded yet** (fill them in here, and buy the pack, before sharing any build).
 
 The shopkeeper is the *Explorer character animated game sprite* from
 [gamedeveloperstudio.com](https://www.gamedeveloperstudio.com/graphics/viewgraphic.php?page-name=Explorer-character-animated-game-sprite&item=1r6w4q805l5b592i6s)

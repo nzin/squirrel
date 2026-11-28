@@ -17,7 +17,7 @@ Controls: **Space** jump, **Shift** throw the equipped weapon, **Q** switch weap
 A *game* is a series of **runs**:
 
 1. A run lasts **60 seconds** (progress line along the bottom, timer at the top). Every run is harder: faster scrolling, closer spawns, and new opponents (beavers from run 2, moles from run 3).
-2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, giant skunk, then a tougher cycle; the boar uses local-only licensed art, see `CREDITS.md` - without it a giant croco takes its place). You get extra acorns, the boss charges after a red blink telegraph, and the run ends 2 seconds after it is defeated (the game keeps running meanwhile).
+2. **Every 3rd run ends with a boss** (giant beaver, a cleaver-wielding boar, giant skunk, then a tougher cycle; the boar uses local-only licensed art, see `CREDITS.md` - without it a giant croco takes its place). You get extra acorns, the boss charges after a red blink telegraph, and when it is defeated it goes down in a string of big explosions (bigger than a chestnut's, with a white flash); the run ends 2 seconds later while the game keeps running.
 3. A finished run pays a completion bonus, then the screen **fades** to the **shop**; choosing *Start run N* fades into the next run.
 4. You have **3 lives** (small squirrels under the score, max 6). A hit costs one; you get back up after a moment, blinking and invulnerable, with the obstacle that killed you cleared away. Losing the last life ends the game; *Restart* begins a new one. **Coins, weapons and upgrades reset every game**; only the best score, best run and the language are saved (`user://squirrel.cfg`).
 
@@ -26,10 +26,14 @@ A *game* is a series of **runs**:
 - **Acorns** are ammo, spent per throw (each weapon has an ammo cost). Boxes and rainbow acorns refill them. **Acorns carry over from one run to the next** within a game; a run never starts with fewer than 3 (+1 per *Bigger Pouch* level, so the pouch is the minimum you start with).
 - **Coins** (gold coin counter, top right): skunk/bird 3, beaver/mole 5, croco 6, pterodactyl 8, bosses 40-80; `?` boxes 2, rainbow acorns 5, smashed trees 2, plus the run bonus.
 - **Lives** are earned by defeating a boss (+1), by finding the rare **1UP heart** on the top cloud row (+1, or 10 coins at the maximum), or in the shop (*Extra Life*, 60 coins). Maximum 6.
-- **Shop** (between runs; a shopkeeper figure describes each ware in a speech bubble and cheers when you buy if its local art is installed, otherwise the descriptions appear in a note panel): buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
-- Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes: **2 damage to every opponent close by**, within 75 px; sold in packs of 10, thrown with the **D** key like the Matrix Fist is on **F**, and uses no acorns), Pinecone Bomb (a burst along the ground when it lands, a mushroom cloud when it hits something), Rainbow Beam, Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn. Every explosion starts with a brief white flash of the whole screen.
+- **Shop** (between runs; a shopkeeper figure describes each ware in a speech bubble and cheers when you buy if its local art is installed, otherwise the descriptions appear in a note panel): what you cannot pay is grayed out and skipped by the cursor; buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), the one-run *Diver Armor*, *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
+- Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes: **2 damage to every opponent close by**, within 75 px; sold in packs of 10, thrown with the **D** key like the Matrix Fist is on **F**, and uses no acorns), Pinecone Bomb (a burst along the ground when it lands, a mushroom cloud when it hits something), Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn. Every explosion starts with a brief white flash of the whole screen.
 - You can stand on trees and on opponents; collision boxes follow the visible part of each sprite (`hitbox` fractions in `enemy.gd` / `tree_prop.gd`, measured from the art).
 - **Ride a bird**: land on a bird and it turns to face right and carries you, flying at the speed of the scrolling so it stays in place on screen (it does not drop eggs on you), until you jump; then it turns back and flies on to the left. Shoot it and you fall.
+
+### Diver Armor (shop, one run)
+
+Bought in the shop for 60 coins and worn for the **whole next run only**: the squirrel becomes a diver (animated walk cycle), has **30 health points** (each contact with a tree, an enemy, an enemy projectile or the boss's charge costs 1; a small bar over the diver and the counter in the HUD show them; boxes are harmless) but **cannot jump**, and **Shift throws harpoons** (1 acorn, plain-acorn damage, no weapon switching) instead of the equipped weapon, which is back the run after. At 0 health points the armor breaks and the run goes on without it: no life is lost, you are the plain squirrel again (it can jump, previous weapon, a brief blink) and the next hit is lethal as usual. The diver art and the harpoon picture are local-only (`private/diver_*.png`, built by `tools/make_diver_art.py`); without them the squirrel sprite and a drawn harpoon are used.
 
 ### Matrix Fist (key F)
 
@@ -55,7 +59,7 @@ Data-driven in `scripts/enemy.gd` (`ai`, `shoot`, `shoot_from`, `shield_from` in
 
 Beaver, croco, raccoon and owl can carry a **frontal shield** - protected enemies only appear **from run 7**.
 
-- **Shield** (run 7+): blocks acorns from the front; get it with the Rainbow Beam, a Pinecone blast, a boomerang on its way back, or the Matrix Fist.
+- **Shield** (run 7+): blocks acorns from the front; get it with a Pinecone blast, a boomerang on its way back, or the Matrix Fist.
 - **Armor and enrage**: +1 hp every 3 runs, hit flash, small health bar; below half hp an enemy is faster and red-tinted (**enraged enemies only appear from run 4**, protected ones from run 7).
 - Projectiles kill on any contact; shoot them down with any weapon. Bosses spit fireballs while they stand.
 - Nobody shoots before run 3.

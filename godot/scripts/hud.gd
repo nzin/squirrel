@@ -156,7 +156,10 @@ func refresh(st: Dictionary) -> void:
     var font := coin_label.get_theme_font("font")
     var text_w := font.get_string_size(coin_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
     coin_icon.position = Vector2(Cfg.SCREEN_W - 10.0 - text_w - 30.0, 47.0)
-    weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
+    if st.get("armored", false):  # the armor's gun: no weapon switching
+        weapon_label.text = "%s %d/%d  (%s)" % [Lang.t("Diver Armor"), st.get("armor_hp", 0), Weapons.ARMOR_HP, Lang.t("%s (%d ammo)", [Lang.t(st["weapon"]), st["weapon_ammo"]])]
+    else:
+        weapon_label.text = Lang.t("%s (%d ammo)  [Q]", [Lang.t(st["weapon"]), st["weapon_ammo"]])
     var chestnuts: int = st["chestnuts"]
     chestnut_icon.visible = in_run and chestnuts > 0 and not in_shop
     chestnut_label.visible = chestnut_icon.visible
@@ -301,6 +304,8 @@ func _shop_screen(st: Dictionary) -> void:
             col = Color(0.5, 1.0, 0.5) if not sel else Color.YELLOW
         elif row["status"] == Lang.t("EQUIPPED"):
             col = Color(0.5, 1.0, 0.5)
+        elif not row["enabled"]:  # cannot pay: grayed out, the cursor skips it
+            col = Color(0.45, 0.42, 0.4)
         if sel:
             menu_root.add_child(_rect(Color(1, 1, 1, 0.12), 36, y - 1, SHELF_W - 16, 29))
             menu_root.add_child(_label(">", 24, Color.YELLOW, 40, y, HORIZONTAL_ALIGNMENT_LEFT, 24))
