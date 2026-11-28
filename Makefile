@@ -4,7 +4,7 @@
 #   make web         export the HTML5 build   -> godot/build/web/
 #   make serve       serve the web build on http://localhost:8000
 #   make macos       export the macOS app     -> godot/build/macos/Squirrel.app (runs full screen)
-#   make run         run the game windowed from source
+#   make run         run the game from source, full screen (START_AT=9 make run: begin at run 9)
 #   make test        headless smoke test
 #   make sounds      re-synthesize the sound effects and the arcade music
 #

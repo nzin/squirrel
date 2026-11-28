@@ -17,6 +17,7 @@ const COMPLETE_DELAY := 1.8  # "RUN COMPLETE" banner time before the fade
 const RESPAWN_DELAY := 1.4   # seconds lying down before getting back up (lives left)
 const INVULN_TIME := 2.5     # blinking invulnerability after a respawn
 const ARMOR_BREAK_GRACE := 1.5  # ...and after the Diver Armor breaks
+const HURT_GRACE := 1.0      # ...and after a hit the squirrel survives (health points left)
 const FLASH_TIME := 0.22     # the white flash at the start of an explosion
 const FLASH_STRENGTH := 0.65
 const FADE_TIME := 0.45
@@ -52,17 +53,29 @@ const BEAVER_SPAWN_DISTANCE := 1700
 const MOLE_SPAWN_DISTANCE := 1800
 const BIRD_SPAWN_DISTANCE := 1500
 const PTERO_SPAWN_DISTANCE := 2000
-# opponents join the mix as the runs go on
-const BEAVER_FROM_RUN := 2
-const MOLE_FROM_RUN := 3
-const CROCO_FROM_RUN := 4
 const CROCO_SPAWN_DISTANCE := 2300
-const BEE_FROM_RUN := 8          # swarms of 3
-const BEE_SPAWN_DISTANCE := 1700
-const RACCOON_FROM_RUN := 9     # needs its (local-only) art: see Enemy.is_available
+const BEE_SPAWN_DISTANCE := 1700    # swarms of 3
 const RACCOON_SPAWN_DISTANCE := 2600
-const OWL_FROM_RUN := 7
 const OWL_SPAWN_DISTANCE := 2800
+
+## Which opponents appear in which run. The bird is in every run and the pterodactyl in every run
+## from PTERO_FROM_RUN on; the others follow this table (index = run - 1; run 10 starts over at the
+## first line, tougher through the armor and speed scaling). The owl, the bee swarm and the raccoon
+## are licensed local-only art: without it (Enemy.is_available) the public opponents of
+## RUN_KIND_FALLBACK stand in (never twice in one run).
+const PTERO_FROM_RUN := 2
+const RUN_KINDS := [
+    ["skunk"],
+    ["skunk", "beaver"],
+    ["skunk", "beaver", "mole"],
+    ["skunk", "mole", "croco"],
+    ["skunk", "mole", "owl"],
+    ["skunk", "mole", "croco", "owl"],
+    ["skunk", "owl", "raccoon"],
+    ["skunk", "owl", "bee"],
+    ["skunk", "owl", "bee", "raccoon"],
+]
+const RUN_KIND_FALLBACK := {"owl": "ptero", "bee": "beaver", "raccoon": "croco"}
 
 const LAYERS := ["trees", "ground", "air", "clouds", "rainbow", "boxes", "popups", "player", "shots"]
 
@@ -78,6 +91,8 @@ var paused := false
 var acorns := Weapons.START_AMMO
 var weapon := "acorn"          # equipped weapon id (see Weapons)
 var armored := false           # wearing the Diver Armor: no jump, harpoons, armor_hp health points
+var run_kinds: Array[String] = []  # the opponents of this run (kinds_for_run)
+var health := 1                # health points of the current life (Loadout.max_health() at its start)
 var armor_hp := 0              # Weapons.ARMOR_HP at the start of an armored run; at 0 the armor breaks
 var run_time := 0.0
 var scroll_speed := Cfg.SCROLL_SPEED
@@ -165,9 +180,9 @@ func _ready() -> void:
     randomize()
     profile.load_from_disk()
     _setup_input()
-    # Exported macOS app runs full screen; editor / `make run` stay windowed
-    # and the web build is sized by the browser page.
-    if OS.get_name() == "macOS" and OS.has_feature("template"):
+    # The desktop game (exported app, editor, `make run`) starts full screen; the web build is
+    # sized by the browser page (a browser only goes full screen on a user gesture).
+    if not OS.has_feature("web"):
         DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
     background = Background.new()
@@ -210,13 +225,35 @@ func _add_key_action(action: String, keycode: Key) -> void:
 
 # ---------------------------------------------------------------- lifecycle
 
-## Brand new game: no coins, no weapons, no upgrades, run 1.
+## The run a new game begins at: the START_AT environment variable (a whole number, 1 or more)
+## when it is set, else 1. Handy to try a later run or a boss right away.
+static func first_run() -> int:
+    var raw := OS.get_environment("START_AT").strip_edges()
+    return maxi(1, int(raw)) if raw.is_valid_int() else 1
+
+
+## Brand new game: no coins, no weapons, no upgrades, run 1 (or START_AT, see first_run).
 func new_game() -> void:
     loadout = Loadout.new()
-    run = 1
+    run = first_run()
     score = 0
     paused = false
     start_run()
+
+
+## The kinds of opponent that appear in run `run_number`. `available` (kind -> bool) says which have
+## their art; the default is Enemy.is_available.
+static func kinds_for_run(run_number: int, available := Callable()) -> Array[String]:
+    if not available.is_valid():
+        available = Enemy.is_available
+    var out: Array[String] = ["bird"]
+    if run_number >= PTERO_FROM_RUN:
+        out.append("ptero")
+    for k: String in RUN_KINDS[(run_number - 1) % RUN_KINDS.size()]:
+        var kind: String = k if available.call(k) else RUN_KIND_FALLBACK.get(k, k)
+        if not out.has(kind):
+            out.append(kind)
+    return out
 
 
 static func is_boss_run(run_number: int) -> bool:
@@ -239,10 +276,13 @@ func start_run() -> void:
     armored = loadout.armor_ready  # worn for this whole run, then spent
     loadout.armor_ready = false
     armor_hp = Weapons.ARMOR_HP if armored else 0
+    health = loadout.max_health()  # every run starts with the current life at full health
     weapon = "harpoon" if armored else loadout.equipped
     var d := float(run - 1)
+    run_kinds = Game.kinds_for_run(run)
     scroll_speed = Cfg.SCROLL_SPEED + 0.25 * minf(d, 8.0)
-    gap_factor = 1.0 / (1.0 + 0.12 * d)
+    # spawns get denser within a group of runs, then ease off for the next group's newcomers
+    gap_factor = 1.0 / (1.0 + 0.12 * float((run - 1) % BOSS_EVERY))
     next_box = 200.0
     next_tree = 500.0
     next_skunk = 1000.0
@@ -788,7 +828,7 @@ func _choose_dash_height() -> void:
 
 
 ## Punch everything the squirrel swept through since last tick (each thing once
-## per leg): enemies take 3 damage (shields don't help), trees are smashed and
+## per leg): enemies take 3 damage, trees are smashed and
 ## enemy projectiles are destroyed.
 func _fist_strike(prev_x: float) -> void:
     var cur_x := squirrel.x
@@ -911,6 +951,9 @@ func frame(delta: float) -> void:
     _apply_fist_motion()
     if (invuln_timer > 0.0 or armored) and squirrel.game_over:
         squirrel.game_over = false  # blinking after a respawn: boxes can't kill either
+    elif squirrel.game_over and not over_started:
+        squirrel.game_over = false  # (the box's side-hit) it costs a health point like any other hit
+        _hurt()
     _begin_game_over_if_needed()
 
     var on_cloud := squirrel.velocity_y >= 0.0 and squirrel.stands_on(clouds)
@@ -947,7 +990,7 @@ func frame(delta: float) -> void:
         if live:
             es.update(gd)
         if not es.active:
-            if (es.kind == "egg" or es.kind == "nut") and es.y + es.h >= Cfg.SOIL_Y:
+            if (es.kind == "nut" or es.kind == "virus") and es.y + es.h >= Cfg.SOIL_Y:
                 audio.sfx("splat")
             _drop(enemy_shots, es)
     for c: Cloud in clouds.duplicate():
@@ -1006,6 +1049,7 @@ func _respawn() -> void:
     squirrel.reset()
     over_started = false
     over_elapsed = 0.0
+    health = loadout.max_health()  # a new life starts at full health
     invuln_timer = INVULN_TIME
     # clear the way so the squirrel doesn't respawn into the thing that killed it
     for t: TreeProp in trees:
@@ -1066,6 +1110,7 @@ func _hud_state() -> Dictionary:
         "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"], "chestnuts": loadout.stock_left("chestnut"),
         "run": run, "in_run": phase == "run",
         "fists": loadout.fists, "lives": loadout.lives, "armored": armored, "armor_hp": armor_hp,
+        "health": health, "max_health": loadout.max_health(),
         "matrix": clampf((1.0 - Cfg.time_scale) / (1.0 - FIST_SLOW), 0.0, 1.0),
         "time_left": maxf(0.0, RUN_SECONDS - run_time), "progress": run_time / RUN_SECONDS,
         "is_boss_run": is_boss_run(run),
@@ -1158,43 +1203,43 @@ func _gap(base: int, extra: int) -> float:
 func _spawn_ground_enemies() -> void:
     if boss_spawned:
         return  # the boss fights alone
-    if scroll_offset >= next_skunk:
+    if run_kinds.has("skunk") and scroll_offset >= next_skunk:
         _spawn_enemy("skunk")
         next_skunk = scroll_offset + _gap(SKUNK_SPAWN_DISTANCE, 1000)
-    if run >= BEAVER_FROM_RUN and scroll_offset >= next_beaver:
+    if run_kinds.has("beaver") and scroll_offset >= next_beaver:
         _spawn_enemy("beaver")
         next_beaver = scroll_offset + _gap(BEAVER_SPAWN_DISTANCE, 1000)
-    if run >= CROCO_FROM_RUN and scroll_offset >= next_croco:
+    if run_kinds.has("croco") and scroll_offset >= next_croco:
         _spawn_enemy("croco")
         next_croco = scroll_offset + _gap(CROCO_SPAWN_DISTANCE, 1000)
-    if run >= RACCOON_FROM_RUN and scroll_offset >= next_raccoon:
+    if run_kinds.has("raccoon") and scroll_offset >= next_raccoon:
         next_raccoon = scroll_offset + _gap(RACCOON_SPAWN_DISTANCE, 1200)
         if Enemy.is_available("raccoon"):
             _spawn_enemy("raccoon")
-    if run >= MOLE_FROM_RUN and scroll_offset >= next_mole:
+    if run_kinds.has("mole") and scroll_offset >= next_mole:
         _spawn_enemy("mole")
         next_mole = scroll_offset + _gap(MOLE_SPAWN_DISTANCE, 1000)
 
 
 func _spawn_birds() -> void:
-    if boss_spawned or scroll_offset < next_bird:
+    if boss_spawned or not run_kinds.has("bird") or scroll_offset < next_bird:
         return
     _spawn_enemy("bird", _reachable_y(40.0))
     next_bird = scroll_offset + _gap(BIRD_SPAWN_DISTANCE, 600)
 
 
-## Later runs add airborne newcomers: bee swarms (run 2+) and owls (run 7+).
+## The airborne opponents of the last group of runs: bee swarms and owls.
 func _spawn_flyers() -> void:
     if boss_spawned:
         return
-    if run >= BEE_FROM_RUN and scroll_offset >= next_bee and Enemy.is_available("bee"):
+    if run_kinds.has("bee") and scroll_offset >= next_bee and Enemy.is_available("bee"):
         next_bee = scroll_offset + _gap(BEE_SPAWN_DISTANCE, 800)
         var y := float(_reachable_y(32.0))
         for i in 3:  # a staggered swarm, each bee zigzagging out of phase
             var bee := _spawn_enemy("bee", y)
             bee.x += i * 55.0
             bee.life = i * 0.9
-    if run >= OWL_FROM_RUN and scroll_offset >= next_owl:
+    if run_kinds.has("owl") and scroll_offset >= next_owl:
         next_owl = scroll_offset + _gap(OWL_SPAWN_DISTANCE, 1200)
         if Enemy.is_available("owl"):
             _spawn_enemy("owl", 270.0)
@@ -1222,7 +1267,7 @@ func _spawn_rainbow() -> void:
 
 ## Pterodactyls only hunt a squirrel that is standing on a cloud.
 func _spawn_ptero(on_cloud: bool) -> void:
-    if boss_spawned or not on_cloud or scroll_offset < next_ptero:
+    if boss_spawned or not run_kinds.has("ptero") or not on_cloud or scroll_offset < next_ptero:
         return
     next_ptero = scroll_offset + _gap(PTERO_SPAWN_DISTANCE, 600)
     _spawn_enemy("ptero", 100.0)
@@ -1252,17 +1297,6 @@ func _shot_hits_enemies(sh: Shot) -> void:
     for e: Enemy in enemies:
         if not e.hittable() or not e.rect().intersects(sr):
             continue
-        if e.blocks(sh) and sh.blast_radius <= 0.0:  # the shield stops it (explosives still blast)
-            e.shield_flash = 0.15
-            audio.sfx("shield_clang")
-            if sh.kind == "boomerang":  # bounces off and flies back
-                sh.returning = true
-                sh.vx = -absf(sh.vx)
-                sh.hit_ids.clear()
-                sh.hit_ids[e.get_instance_id()] = true
-            else:
-                sh.active = false
-            return
         if sh.pierce:
             var id := e.get_instance_id()
             if sh.hit_ids.has(id):
@@ -1298,8 +1332,9 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
     match kind:
         "gas":
             es = EnemyShot.create("gas", r.position.x - 6.0, Cfg.SOIL_Y - 22.0)
-        "egg":
-            es = EnemyShot.create("egg", r.get_center().x, r.end.y)
+        "virus":  # the boss's tail lets go of it (top-left of its art): it comes down on the squirrel
+            var sqr := squirrel.rect()
+            es = EnemyShot.create("virus", e.x + e.w * 0.3, e.y + e.h * 0.1, Vector2(sqr.get_center().x, sqr.end.y - 16.0))
         "nut":  # leaves his front paws (the side he faces) and flies straight and level
             es = EnemyShot.create("nut", r.position.x - 12.0, r.position.y + r.size.y * 0.45)
         _:  # "fire": aimed at the squirrel
@@ -1312,6 +1347,8 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
             audio.sfx("hiss")
         "fire":
             audio.sfx("fireball")
+        "virus":
+            audio.sfx("throw_pinecone")
 
 
 func _blast(sh: Shot) -> void:
@@ -1338,7 +1375,15 @@ func _damage_enemy(e: Enemy, dmg: int) -> void:
 ## point (and the armor breaks at 0); otherwise it is lethal.
 func _hurt() -> void:
     if not armored:
-        squirrel.game_over = true
+        if squirrel.game_over:
+            return  # already down
+        health -= 1
+        if health <= 0:
+            squirrel.game_over = true
+        else:  # survives: a short blinking grace, so one contact costs one point
+            squirrel.flash_hurt()
+            audio.sfx("hit")
+            invuln_timer = HURT_GRACE
         return
     armor_hp = maxi(0, armor_hp - 1)
     squirrel.armor_frac = float(armor_hp) / Weapons.ARMOR_HP

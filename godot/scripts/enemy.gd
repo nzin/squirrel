@@ -18,9 +18,8 @@ extends Entity
 ## Kinds marked "private_only" (bee, owl, raccoon) use licensed local-only art: see is_available().
 ## (owl and bee use `wave` with their own "wave_amp" / "wave_freq": a slow wide
 ## swoop and a fast jittery zigzag)
-## Protection: `shielded` blocks shots from the front (not bombs, or a
-## returning boomerang); extra hp from armor in later runs; `enraged` below
-## half hp (faster, from run 4 only). Shooting ("shoot": gas / egg / fire) only from `shoot_from`.
+## Extra hp from armor in later runs; `enraged` below
+## half hp (faster, from run 4 only). Shooting ("shoot": gas / fire) only from `shoot_from`.
 ## All movement is multiplied by Cfg.time_scale so slow motion stays smooth.
 
 const KINDS := {
@@ -36,14 +35,14 @@ const KINDS := {
         "w": 90.0, "h": 40.0, "air": false, "hp": 2,
         "frames": ["beaver1.png", "beaver2.png", "beaver3.png"],
         "interval": 0.25, "random_frames": false, "forward": -2.0, "fall_vx": -2.5,
-        "ai": "charge", "can_shield": true,
+        "ai": "charge",
     },
     "croco": {
         "hit": Rect2(0.07, 0.42, 0.86, 0.57), "coins": 6,
         "w": 80.0, "h": 80.0, "air": false, "hp": 2,
         "frames": ["croco1.png", "croco2.png", "croco3.png"],
         "interval": 0.75, "random_frames": true, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "hop", "can_shield": true,
+        "ai": "hop",
     },
     "mole": {
         "hit": Rect2(0.10, 0.34, 0.84, 0.66), "coins": 5,
@@ -57,7 +56,7 @@ const KINDS := {
         "w": 60.0, "h": 60.0, "air": true, "hp": 1,
         "frames": ["bird_1.png", "bird_2.png"],
         "interval": 0.5, "random_frames": false, "forward": -0.5, "fall_vx": -2.5,
-        "ai": "wave", "shoot": "egg", "shoot_from": 4,
+        "ai": "wave",  # (a bird never shoots or drops anything)
     },
     "ptero": {
         "hit": Rect2(0.19, 0.18, 0.55, 0.54), "coins": 8,
@@ -73,7 +72,7 @@ const KINDS := {
         "w": 100.0, "h": 75.0, "air": false, "hp": 2,
         "frames": [], "private_only": true,
         "interval": 0.13, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "throw", "can_shield": true,
+        "ai": "throw",
         "private": {
             "frames": ["res://private/raccoon_1.png", "res://private/raccoon_2.png", "res://private/raccoon_3.png",
                 "res://private/raccoon_4.png", "res://private/raccoon_5.png", "res://private/raccoon_6.png",
@@ -88,7 +87,7 @@ const KINDS := {
         "w": 52.0, "h": 80.0, "air": true, "hp": 2,
         "frames": [], "private_only": true,
         "interval": 0.28, "random_frames": false, "forward": -1.0, "fall_vx": -2.5,
-        "ai": "wave", "wave_amp": 105.0, "wave_freq": 1.5, "can_shield": true,
+        "ai": "wave", "wave_amp": 105.0, "wave_freq": 1.5,
         "private": {
             # eyes open, open, open, blink, open, open, sleepy: a blinking, drowsy owl
             "frames": ["res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_1.png", "res://private/owl_2.png",
@@ -129,25 +128,43 @@ const KINDS := {
             "interval": 0.28,
         },
     },
-    "boss_skunk": {
-        "hit": Rect2(0.04, 0.53, 0.84, 0.47), "coins": 80, "boss": true,
+    # The third boss is a pink monster that lobs viruses (a tail swing throws them). Its art is
+    # licensed and local-only too (godot/private/virus_1..9.png, see CREDITS.md); without it a giant
+    # skunk takes its place, still lobbing viruses (it just has no throwing poses).
+    "boss_virus": {
+        "hit": Rect2(0.04, 0.53, 0.84, 0.47), "coins": 80, "boss": true, "lobs_virus": true,
         "w": 210.0, "h": 166.0, "air": false, "hp": 18,
         "frames": ["skunk_1.png", "skunk_2.png", "skunk_3.png"],
         "interval": 0.6, "random_frames": false, "forward": 0.0, "fall_vx": -1.0,
+        "private": {
+            # frames 1-4: walk cycle; 5-9: the throw (raises the tail, tail holds the virus, lets go, follow-through)
+            "frames": ["res://private/virus_1.png", "res://private/virus_2.png", "res://private/virus_3.png",
+                "res://private/virus_4.png", "res://private/virus_5.png", "res://private/virus_6.png",
+                "res://private/virus_7.png", "res://private/virus_8.png", "res://private/virus_9.png"],
+            "anim_frames": 4, "interval": 0.18,
+            # the art's canvas is 365x265 (body on the right, room for the long tail on the left):
+            # 190 px tall puts the body at about 120 px - still jumpable
+            "w": 262.0, "h": 190.0, "hit": Rect2(0.46, 0.34, 0.52, 0.64),
+        },
     },
 }
 
 const DEFEAT_HOP_HEIGHT := 20.0
 
 # One boss every 3rd run, cycling through BOSSES.
-const BOSSES: Array[String] = ["boss_beaver", "boss_boar", "boss_skunk"]
+const BOSSES: Array[String] = ["boss_beaver", "boss_boar", "boss_virus"]
 const BOSS_STOP_MARGIN := 40.0
 const BOSS_IDLE_TIME := 2.0
 const BOSS_WARN_TIME := 0.8
+## The virus boss's throw (seconds into it when each throwing frame, 5-9 of its art, ends). The tail
+## holds the virus during frame 7 and lets go at its end: that is when the virus leaves.
+const VIRUS_THROW_ENDS := [0.3, 0.55, 0.8, 1.0, 1.3]
+const VIRUS_FIRST_FRAME := 4
+const VIRUS_RELEASE_AT := 0.8
+const VIRUS_THROW_GAP := 1.7    # seconds between two throws while it stands (x0.7 when enraged)
 const BOSS_CHARGE_SPEED := 7.0
 
 const ENRAGE_FROM_RUN := 4   # no angry enemies in the first runs
-const SHIELD_FROM_RUN := 7   # no protected (shielded) enemies before this run
 const TELEGRAPH := 0.45        # warning blink before a shot / charge / dive
 const CHARGE_TRIGGER := 330.0  # beaver charges when this close
 const CHARGE_SPEED := 6.0
@@ -169,7 +186,6 @@ const BURROW_SPEED := -2.5
 const SURFACE_DISTANCE := 170.0
 const WAVE_AMP := 35.0
 const WAVE_FREQ := 2.4
-const EGG_GRAVITY := EnemyShot.EGG_G
 
 const BLINK_RED := Color(1.0, 0.45, 0.35)
 const BLINK_YELLOW := Color(1.0, 0.95, 0.4)
@@ -199,11 +215,9 @@ var fall_vy := 0.0
 
 # --- smarter behaviour ---
 var speed_mult := 1.0
-var shielded := false
 var enraged := false
 var can_enrage := false    # set by scale_for_run (run 4+)
 var flash := 0.0           # white flash after a hit (s)
-var shield_flash := 0.0
 var life := 0.0            # scaled seconds alive (drives the sine wave)
 var base_y := 0.0
 var ai := ""
@@ -216,6 +230,8 @@ var shoot_kind := ""
 var shoot_cd := 0.0
 var shoot_telegraph := 0.0
 var pending_shot := ""     # kind of projectile Game should create this tick
+var virus_t := -1.0        # the virus boss's throw in progress: seconds into it (-1 = not throwing)
+var _virus_released := false
 var pending_sound := ""    # sound cue for Game to play ("warn", "stomp", "dive"...)
 var _blink := Color.WHITE  # WHITE = not blinking
 
@@ -283,7 +299,7 @@ func anchor() -> void:
 
 
 ## Make this enemy tougher / smarter for run `run_number` (1 = first run):
-## faster, armored (more hp), shielded, and able to shoot from `shoot_from`.
+## faster, armored (more hp), and able to shoot from `shoot_from`.
 func scale_for_run(run_number: int) -> void:
     can_enrage = run_number >= ENRAGE_FROM_RUN
     if is_boss:
@@ -292,7 +308,6 @@ func scale_for_run(run_number: int) -> void:
     hp += (run_number - 1) / 3
     max_hp = hp
     can_shoot = shoot_kind != "" and run_number >= int(cfg.get("shoot_from", 99))
-    shielded = cfg.get("can_shield", false) and run_number >= SHIELD_FROM_RUN and randf() < 0.4
 
 
 func _show_frame(i: int) -> void:
@@ -320,21 +335,12 @@ func hittable() -> bool:
     return not (kind == "mole" and underground)
 
 
-## Does the shield stop `sh`? Only shots coming from the front, and not the ones that
-## break shields (a shot with `breaks_shield`) - bombs use blast damage instead.
-func blocks(sh: Shot) -> bool:
-    if sh.breaks_shield:
-        return false
-    return shielded and sh.vx > 0.0
-
-
 ## Apply a hit. Returns true if this hit defeated it.
 func hit(damage := 1) -> bool:
     hp -= damage
     flash = 0.12
     if hp <= 0:
         defeated = true
-        shielded = false
         _apply_tint()
         queue_redraw()
         return true
@@ -363,7 +369,6 @@ func take_shot() -> String:
 func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
     life += delta
     flash = maxf(0.0, flash - delta)
-    shield_flash = maxf(0.0, shield_flash - delta)
     _blink = Color.WHITE
     if defeated:
         _update_defeated(scroll_speed)
@@ -388,7 +393,7 @@ func update(scroll_speed: float, delta: float, target := Rect2()) -> void:
         if not ridden:  # a bird doesn't bomb its own rider
             _update_shooting(delta, target)
     _apply_tint()
-    if shielded or shield_flash > 0.0 or (max_hp > 1 and hp < max_hp):
+    if max_hp > 1 and hp < max_hp:
         queue_redraw()
     sync()
 
@@ -553,22 +558,26 @@ func _update_hopper(scroll_speed: float, delta: float) -> void:
 func _update_boss(scroll_speed: float, delta: float) -> void:
     prev_x = x
     var ts := Cfg.time_scale
-    _animate(delta)
-    var idle_time := BOSS_IDLE_TIME * (0.5 if enraged else 1.0)
+    if virus_t < 0.0:  # (a throw plays its own poses)
+        _animate(delta)
+    var lobs: bool = cfg.get("lobs_virus", false)
+    var idle_time := BOSS_IDLE_TIME * (0.5 if enraged else 1.0) * (1.7 if lobs else 1.0)
     match boss_state:
         "enter":
             x -= scroll_speed + 3.0 * ts
             if x <= Cfg.SCREEN_W - w - BOSS_STOP_MARGIN:
                 boss_state = "idle"
                 boss_timer = 0.0
-                shoot_cd = 1.0
+                shoot_cd = 0.2 if lobs else 1.0
         "idle":
             boss_timer += delta
             shoot_cd -= delta
-            if shoot_cd <= 0.0:  # spits a fireball at the squirrel
+            if lobs:  # lobs viruses with its tail (a pose sequence), instead of spitting fire
+                _update_virus_throw(delta)
+            elif shoot_cd <= 0.0:  # spits a fireball at the squirrel
                 pending_shot = "fire"
                 shoot_cd = 1.2 if enraged else 2.0
-            if boss_timer >= idle_time:
+            if boss_timer >= idle_time and virus_t < 0.0:  # (never cut a throw short)
                 boss_state = "warn"
                 boss_timer = 0.0
                 pending_sound = "warn"
@@ -583,6 +592,33 @@ func _update_boss(scroll_speed: float, delta: float) -> void:
             if x + w < 0.0:
                 x = Cfg.SPAWN_X  # comes round again
                 boss_state = "enter"
+
+
+## One tick of the virus boss's throw: starts when the cooldown is over, plays frames 5-9 of its
+## art (the first ones blink yellow as the warning), and sends the virus when the tail lets go.
+func _update_virus_throw(delta: float) -> void:
+    if virus_t < 0.0:
+        if shoot_cd > 0.0:
+            return
+        virus_t = 0.0
+        _virus_released = false
+        pending_sound = "warn"
+    virus_t += delta
+    var i := 0
+    while i < VIRUS_THROW_ENDS.size() and virus_t >= VIRUS_THROW_ENDS[i]:
+        i += 1
+    if i >= VIRUS_THROW_ENDS.size():  # follow-through over: back to walking
+        virus_t = -1.0
+        shoot_cd = VIRUS_THROW_GAP * (0.7 if enraged else 1.0)
+        _blink = Color.WHITE
+        _show_frame(0)
+        return
+    if not _virus_released and virus_t >= VIRUS_RELEASE_AT:
+        _virus_released = true
+        pending_shot = "virus"
+    _blink = BLINK_YELLOW if i < 2 and int(virus_t * 14.0) % 2 == 0 else Color.WHITE
+    if cfg["frames"].size() > VIRUS_FIRST_FRAME + i:  # (the stand-in art has no throwing poses)
+        _show_frame(VIRUS_FIRST_FRAME + i)
 
 
 func _update_mole(scroll_speed: float, delta: float, target: Rect2) -> void:
@@ -627,7 +663,7 @@ func _update_defeated(scroll_speed: float) -> void:
 
 # ---------------------------------------------------------------- shooting
 
-## Later enemies shoot: skunks spray gas, birds drop eggs, pterodactyls spit
+## Later enemies shoot: skunks spray gas, pterodactyls spit
 ## fire. Each blinks yellow for TELEGRAPH seconds before firing.
 func _update_shooting(delta: float, target: Rect2) -> void:
     if not can_shoot or target.size == Vector2.ZERO:
@@ -655,12 +691,6 @@ func _shot_lined_up(r: Rect2, target: Rect2) -> bool:
             return dx > 140.0 and dx < 520.0
         "fire":
             return dx > 200.0 and dx < 620.0
-        "egg":
-            # the egg keeps the bird's drift: drop it early enough to land on the squirrel
-            var fall := maxf(target.position.y - r.end.y, 1.0)
-            var frames := sqrt(2.0 * fall / EGG_GRAVITY) + TELEGRAPH * 60.0
-            var lead := (Cfg.SCROLL_SPEED + 0.5) * frames
-            return absf((r.get_center().x - target.get_center().x) - lead) < 30.0
     return false
 
 
@@ -683,16 +713,6 @@ func _draw() -> void:
     if defeated:
         return
     var hb := Rect2(hitbox.position.x * w, hitbox.position.y * h, hitbox.size.x * w, hitbox.size.y * h)
-    if shielded:  # a shield held out in front (left side)
-        var sx := hb.position.x - 10.0
-        var top := hb.position.y - 4.0
-        var bottom := hb.end.y + 2.0
-        var mid := (top + bottom) / 2.0
-        var col := Color(0.85, 0.95, 1.0) if shield_flash > 0.0 else Color(0.45, 0.65, 0.95)
-        var pts := PackedVector2Array([Vector2(sx + 8, top), Vector2(sx, top + 8), Vector2(sx - 2, mid),
-            Vector2(sx, bottom - 8), Vector2(sx + 8, bottom), Vector2(sx + 12, mid)])
-        draw_colored_polygon(pts, col)
-        draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[4], pts[5], pts[0]]), Color(0.15, 0.25, 0.5), 2.0)
     if not is_boss and max_hp > 1 and hp < max_hp:  # little health bar once wounded
         var bw := minf(hb.size.x, 46.0)
         var bx := hb.position.x + (hb.size.x - bw) / 2.0

@@ -29,6 +29,8 @@ var acorn_label: Label
 var coin_label: Label
 var coin_icon: CoinIcon
 var weapon_label: Label
+var health_icon: HealthIcon
+var health_label: Label
 var fist_icon: FistIcon
 var fist_label: Label
 var chestnut_icon: ChestnutIcon
@@ -81,12 +83,15 @@ func _ready() -> void:
     coin_icon = CoinIcon.new(24.0)
     weapon_label = _label("", 22, Color.BLACK, 10, 74, HORIZONTAL_ALIGNMENT_LEFT, 400)
     run_label = _label("", 24, Color.BLACK, Cfg.SCREEN_W / 2.0 - 120, 8, HORIZONTAL_ALIGNMENT_CENTER, 240)
+    health_icon = HealthIcon.new(26.0)
+    health_icon.position = Vector2(10, 102)
+    health_label = _label("", 24, Color.BLACK, 42, 102, HORIZONTAL_ALIGNMENT_LEFT, 200)
     fist_icon = FistIcon.new(26.0)
-    fist_icon.position = Vector2(10, 102)
-    fist_label = _label("", 24, Color.BLACK, 42, 102, HORIZONTAL_ALIGNMENT_LEFT, 200)
+    fist_icon.position = Vector2(10, 130)
+    fist_label = _label("", 24, Color.BLACK, 42, 130, HORIZONTAL_ALIGNMENT_LEFT, 200)
     chestnut_icon = ChestnutIcon.new(26.0)
-    chestnut_label = _label("", 24, Color.BLACK, 42, 130, HORIZONTAL_ALIGNMENT_LEFT, 200)
-    for n: Node in [score_label, acorn_label, coin_label, coin_icon, weapon_label, run_label, fist_icon, fist_label, chestnut_icon, chestnut_label]:
+    chestnut_label = _label("", 24, Color.BLACK, 42, 158, HORIZONTAL_ALIGNMENT_LEFT, 200)
+    for n: Node in [score_label, acorn_label, coin_label, coin_icon, weapon_label, run_label, health_icon, health_label, fist_icon, fist_label, chestnut_icon, chestnut_label]:
         add_child(n)
     # one small squirrel per life
     for i in Weapons.MAX_LIVES:
@@ -164,12 +169,15 @@ func refresh(st: Dictionary) -> void:
     chestnut_icon.visible = in_run and chestnuts > 0 and not in_shop
     chestnut_label.visible = chestnut_icon.visible
     chestnut_label.text = "x%d  [D]" % chestnuts
-    var row_y := 102.0 if st["fists"] == 0 else 130.0  # sits under the fist row when there is one
+    var row_y := 130.0 if st["fists"] == 0 else 158.0  # sits under the fist row when there is one
     chestnut_icon.position = Vector2(10, row_y)
     chestnut_label.position = Vector2(42, row_y)
     flash_rect.color.a = st["flash"]
 
     var fists: int = st["fists"]
+    health_icon.visible = in_run and not in_shop
+    health_label.visible = health_icon.visible
+    health_label.text = "%d/%d" % [st.get("health", 1), st.get("max_health", 1)]
     fist_icon.visible = in_run and fists > 0 and not in_shop
     fist_label.visible = fist_icon.visible
     fist_label.text = "x%d  [F]" % fists
@@ -184,7 +192,7 @@ func refresh(st: Dictionary) -> void:
     bar_bottom.position.y = Cfg.SCREEN_H - LETTERBOX * m
     # black HUD text would vanish on the black cinematic bars
     var ink := Color.WHITE if m > 0.35 else Color.BLACK
-    for l: Label in [score_label, acorn_label, weapon_label, run_label, fist_label, chestnut_label]:
+    for l: Label in [score_label, acorn_label, weapon_label, run_label, health_label, fist_label, chestnut_label]:
         l.add_theme_color_override("font_color", ink)
 
     run_label.visible = in_run
@@ -309,7 +317,12 @@ func _shop_screen(st: Dictionary) -> void:
         if sel:
             menu_root.add_child(_rect(Color(1, 1, 1, 0.12), 36, y - 1, SHELF_W - 16, 29))
             menu_root.add_child(_label(">", 24, Color.YELLOW, 40, y, HORIZONTAL_ALIGNMENT_LEFT, 24))
-        menu_root.add_child(_label(row["name"], 22, col, 66, y, HORIZONTAL_ALIGNMENT_LEFT, 440))
+        var icon := _shop_icon(row["id"])  # in front of the name (a column of its own)
+        if icon != null:
+            icon.position = Vector2(66.0, y + 3.0)
+            icon.modulate = Color(1, 1, 1, 1.0 if row["enabled"] else 0.45)
+            menu_root.add_child(icon)
+        menu_root.add_child(_label(row["name"], 22, col, 94, y, HORIZONTAL_ALIGNMENT_LEFT, 412))
         menu_root.add_child(_label(row["status"], 22, col, 450, y, HORIZONTAL_ALIGNMENT_RIGHT, 140))
     # the shopkeeper talks: what you just did, else a description of the selected ware
     var line: String = st["shop_message"]
@@ -322,6 +335,32 @@ func _shop_screen(st: Dictionary) -> void:
     else:  # no figure: a plain note panel beside the shelf
         _speech_bubble(line, Vector2(626, 118), Vector2(168, 380), false)
     menu_root.add_child(_centered(Lang.t("UP/DOWN select - ENTER buy / equip"), 20, GREY, Cfg.SCREEN_H - 22, SHOP_CX))
+
+
+## The little picture in front of a shop row (null for the rows that have none).
+func _shop_icon(row_id: String) -> Control:
+    match row_id:
+        "acorn":
+            return ShopIcon.new("acorn")
+        "boomerang":
+            return ShopIcon.new("boomerang")
+        "spread":
+            return ShopIcon.new("spread")
+        "homing":
+            return ShopIcon.new("homing")
+        "pinecone":
+            return ShopIcon.new("pinecone")
+        "chestnut":
+            return ChestnutIcon.new(22.0)
+        Shop.FIST_ROW:
+            return ShopIcon.new("matrix")
+        Shop.ARMOR_ROW:
+            return ShopIcon.new("helmet")
+        Shop.LIFE_ROW:
+            return ShopIcon.new("heart")
+        Shop.HEALTH_ROW:
+            return HealthIcon.new(22.0)
+    return null
 
 
 ## A cream speech bubble whose tail points down at the shopkeeper.

@@ -4,18 +4,12 @@ extends SceneTree
 ## Drives Game.frame() directly (no real time) and asserts the pygame behaviour.
 
 var failures := 0
-var _shield_leak := false
 
 
 func check(cond: bool, msg: String) -> void:
     print(("  ok   " if cond else "  FAIL ") + msg)
     if not cond:
         failures += 1
-
-
-func check_no_shield_run2(e: Enemy) -> void:
-    if e.shielded:
-        _shield_leak = true
 
 
 ## Clear the world and stop all spawning so a test fully controls what is on screen.
@@ -109,6 +103,7 @@ func _initialize() -> void:
     game.next_tree = 1e9
     game.next_skunk = 1e9
     game.next_bird = 1e9
+    game.next_beaver = 1e9  # (a beaver is part of run 1 now)
     game.do_jump()
     for i in 40:
         game.frame(dt)
@@ -157,10 +152,9 @@ func _initialize() -> void:
     print("riding a bird")
     game.new_game()
     _quiet(game)
-    game.run = 9  # run 9: birds are able to shoot, so we can check this one does not
+    game.run = 9  # a late run: birds still never drop anything
     var ride_bird := Enemy.create("bird", 40.0, 300.0)
-    ride_bird.can_shoot = true
-    ride_bird.shoot_cd = 0.0
+    ride_bird.scale_for_run(game.run)
     game.layers["air"].add_child(ride_bird)
     game.enemies.append(ride_bird)
     game.squirrel.y = 262.0
@@ -235,6 +229,7 @@ func _initialize() -> void:
     game.next_tree = 1e9
     game.next_skunk = 1e9
     game.next_bird = 1e9
+    game.next_beaver = 1e9  # (a beaver is part of run 1 now)
     var t2 := TreeProp.new()
     t2.place(300.0, 425.0)
     game.layers["trees"].add_child(t2)
@@ -264,6 +259,7 @@ func _initialize() -> void:
     game.next_tree = 1e9
     game.next_skunk = 1e9
     game.next_bird = 1e9
+    game.next_beaver = 1e9  # (a beaver is part of run 1 now)
     var sk := Enemy.create("skunk", 300.0, 380.0)
     game.layers["ground"].add_child(sk)
     game.enemies.append(sk)
@@ -298,6 +294,7 @@ func _initialize() -> void:
     game.next_tree = 1e9
     game.next_skunk = 1e9
     game.next_bird = 1e9
+    game.next_beaver = 1e9  # (a beaver is part of run 1 now)
     var n := 0
     while not game.squirrel.game_over and n < 600:
         game.frame(dt)
@@ -474,14 +471,6 @@ func _initialize() -> void:
     dmg_nut.detonate()
     game._update_shots()
     check(dmg_nut.damage == 2 and tough1.hp == 3 and tough2.hp == 3 and tough_far.hp == 5, "the chestnut explosion deals 2 damage to each opponent close by (hp %d, %d), none far away (%d)" % [tough1.hp, tough2.hp, tough_far.hp])
-    var shielded := Enemy.create("beaver", 300.0, 420.0)
-    shielded.shielded = true
-    game.layers["ground"].add_child(shielded)
-    game.enemies.append(shielded)
-    var shield_nut := Shot.create("chestnut", 300.0, 440.0)
-    game._add_shot(shield_nut)
-    game._shot_hits_enemies(shield_nut)
-    check(shield_nut.exploding, "...and a shield doesn't stop it exploding")
 
     print("hitboxes ignore empty sprite area")
     var sk3 := Enemy.create("skunk", 0.0, 0.0)
@@ -493,7 +482,7 @@ func _initialize() -> void:
     print("shop")
     game.new_game()
     var pr: Loadout = game.loadout
-    check(pr.coins == 0 and pr.owned == ["acorn"] and pr.ammo_level == 0, "a new game starts with no coins, weapons or upgrades")
+    check(pr.coins == 0 and pr.owned == ["acorn"] and pr.health_level == 0, "a new game starts with no coins, weapons or upgrades")
     pr.coins = 40
     check(Shop.activate(pr, "spread").begins_with("Bought") and pr.coins == 25 and pr.equipped == "spread", "buy + auto-equip a weapon")
     check(Shop.activate(pr, "homing") == "Not enough coins." and pr.coins == 25 and not pr.owns("homing"), "too expensive: nothing changes")
@@ -501,9 +490,9 @@ func _initialize() -> void:
     check(Shop.activate(pr, "acorn") == "Bought Acorn x10!" and pr.equipped == "acorn" and pr.coins == 20 and pr.acorns_for_next_run() == 13, "the Acorn row sells 10 acorns for 5 coins (and equips the acorn)")
     pr.coins = 25
     pr.carried_acorns = 3
-    check(Shop.activate(pr, Shop.AMMO_ROW) == "Pouch upgraded!" and pr.coins == 15 and pr.ammo_level == 1, "buy +1 starting acorn")
+    check(Shop.activate(pr, Shop.HEALTH_ROW) == "Health up!" and pr.coins == 15 and pr.health_level == 1, "buy More health")
     game.start_run()
-    check(game.acorns == 4 and game.loadout.coins == 15, "next run keeps purchases; the Bigger Pouch raises the starting minimum to 4")
+    check(game.acorns == 3 and game.loadout.coins == 15 and game.health == 2, "next run keeps purchases; every life now starts with 2 health points")
     game.cycle_weapon()
     check(game.weapon == "spread", "Q cycles through owned weapons")
     game.cycle_weapon()
@@ -528,20 +517,13 @@ func _initialize() -> void:
     game.run += 1
     game.start_run()
     check(game.acorns == 3, "running low: a run never starts with fewer than the minimum (3)")
-    game.loadout.ammo_level = 2
-    game.acorns = 2
-    game.run_time = Game.RUN_SECONDS - 0.01
-    game.frame(dt)
-    game.run += 1
-    game.start_run()
-    check(game.acorns == 5, "...and the Bigger Pouch raises that minimum (3 + 2 = 5)")
     game.acorns = 20
     game.run_time = Game.RUN_SECONDS - 0.01
     game.frame(dt)
     game.new_game()
     check(game.acorns == 3 and game.loadout.carried_acorns == 3, "a new game forgets the old acorns")
     Lang.current = "fr"
-    check(Lang.t("You keep your acorns between runs, and never start one with fewer than %d (level %d/%d).", [3, 0, 5]).begins_with("Vous gardez"), "the pouch text is translated")
+    check(Lang.t("More health") == "Plus de santé" and Lang.t("Each life starts with %d health points (level %d/%d). A hit costs 1 point.", [2, 1, 5]).begins_with("Chaque vie"), "the More health text is translated")
     Lang.current = "en"
 
     print("run lifecycle")
@@ -710,7 +692,7 @@ func _initialize() -> void:
     for k: String in ["bee", "owl", "raccoon"]:
         if not Enemy.is_available(k):
             game.new_game()
-            game.run = 12
+            game.run = 9  # (the run with the owl, the bee swarm and the raccoon)
             game.start_run()
             _quiet(game)
             game.set("next_" + k, 0.0)
@@ -719,11 +701,11 @@ func _initialize() -> void:
             check(game.enemies.filter(func(e: Enemy) -> bool: return e.kind == k).is_empty(), "%s: no art installed -> never spawned (and no crash)" % k)
     var roster := []
     if art_kinds.has("owl"):
-        roster.append(["owl", Game.OWL_FROM_RUN, 1])
+        roster.append(["owl", 5, 1])
     if art_kinds.has("bee"):
-        roster.append(["bee", Game.BEE_FROM_RUN, 3])
+        roster.append(["bee", 8, 3])
     if art_kinds.has("raccoon"):
-        roster.append(["raccoon", Game.RACCOON_FROM_RUN, 1])
+        roster.append(["raccoon", 7, 1])
     for entry in roster:
         var nm: String = entry[0]
         var from_run: int = entry[1]
@@ -828,40 +810,21 @@ func _initialize() -> void:
             bee_hi = maxf(bee_hi, bee_e.y)
         check(bee_hi - bee_lo > 80.0 and bee_e.hp == 1, "bee: fast zigzag, one hit kills (%.0f px)" % (bee_hi - bee_lo))
 
-    print("smarter enemies: protection")
+    print("smarter enemies: no shields")
     game.new_game()
     _quiet(game)
     var sb := Enemy.create("beaver", 300.0, 420.0)
-    sb.shielded = true
+    sb.scale_for_run(30)
+    sb.hp = 3
     game.layers["ground"].add_child(sb)
     game.enemies.append(sb)
+    check(not ("shielded" in sb) and not sb.cfg.has("can_shield"), "no opponent can carry a shield, however late the run")
     var front := Shot.create("acorn", 300.0, 440.0)
     game._shot_hits_enemies(front)
-    check(sb.hp == 2 and not front.active, "a shield stops acorns from the front")
+    check(sb.hp == 2 and not front.active, "an acorn from the front hurts")
     var boom2 := Shot.create("boomerang", 280.0, 440.0)
     game._shot_hits_enemies(boom2)
-    check(sb.hp == 2 and boom2.returning and boom2.vx < 0.0, "a boomerang bounces off the shield")
-    var back := Shot.create("boomerang", 300.0, 440.0)
-    back.vx = -9.0
-    game._shot_hits_enemies(back)
-    check(sb.hp == 1, "...but hits from behind on the way back")
-    sb.hp = 2
-    var beam2 := Shot.create("acorn", 280.0, 440.0)
-    beam2.w = 50.0
-    beam2.damage = 2
-    beam2.pierce = true
-    beam2.breaks_shield = true
-    game._shot_hits_enemies(beam2)
-    check(sb.defeated, "a shot flagged breaks_shield ignores shields")
-    var sb2 := Enemy.create("beaver", 300.0, 420.0)
-    sb2.shielded = true
-    game.layers["ground"].add_child(sb2)
-    game.enemies.append(sb2)
-    var bomb2 := Shot.create("pinecone", 300.0, 440.0)
-    game._add_shot(bomb2)
-    bomb2.detonate()
-    game._update_shots()
-    check(sb2.defeated, "a pinecone blast ignores the shield")
+    check(sb.hp == 1 and not boom2.returning, "a boomerang from the front hurts and flies on")
 
     var armored := Enemy.create("beaver", 0.0, 0.0)
     armored.scale_for_run(7)
@@ -884,15 +847,6 @@ func _initialize() -> void:
     angry.scale_for_run(4)
     angry.hit(angry.hp - 1)  # one hp left of three
     check(angry.enraged, "from run 4 a wounded enemy gets enraged")
-    var shielded_seen := false
-    for i in 120:
-        var cand := Enemy.create("beaver", 0.0, 0.0)
-        cand.scale_for_run(Enemy.SHIELD_FROM_RUN - 1)
-        check_no_shield_run2(cand)
-        var c6 := Enemy.create("beaver", 0.0, 0.0)
-        c6.scale_for_run(Enemy.SHIELD_FROM_RUN)
-        shielded_seen = shielded_seen or c6.shielded
-    check(shielded_seen and not _shield_leak, "protected (shielded) enemies only from run 7")
 
     print("smarter enemies: shooting")
     var sk_a := Enemy.create("skunk", 0.0, 0.0)
@@ -900,14 +854,14 @@ func _initialize() -> void:
     var sk_b := Enemy.create("skunk", 0.0, 0.0)
     sk_b.scale_for_run(3)
     var bd_a := Enemy.create("bird", 0.0, 0.0)
-    bd_a.scale_for_run(3)
+    bd_a.scale_for_run(4)
     var bd_b := Enemy.create("bird", 0.0, 0.0)
-    bd_b.scale_for_run(4)
+    bd_b.scale_for_run(30)
     var pt_a := Enemy.create("ptero", 0.0, 0.0)
     pt_a.scale_for_run(4)
     var pt_b := Enemy.create("ptero", 0.0, 0.0)
     pt_b.scale_for_run(5)
-    check(not sk_a.can_shoot and sk_b.can_shoot and not bd_a.can_shoot and bd_b.can_shoot and not pt_a.can_shoot and pt_b.can_shoot, "nobody shoots in the first runs: skunk 3+, bird 4+, ptero 5+")
+    check(not sk_a.can_shoot and sk_b.can_shoot and not bd_a.can_shoot and not bd_b.can_shoot and not pt_a.can_shoot and pt_b.can_shoot, "nobody shoots in the first runs: skunk 3+, ptero 5+; a bird never drops anything, whatever the run")
     game.new_game()
     game.run = 3
     game.start_run()
@@ -939,10 +893,6 @@ func _initialize() -> void:
     var acorn_shot := Shot.create("acorn", 395.0, 470.0)
     game._shot_hits_enemy_shots(acorn_shot)
     check(not gas2.active and not acorn_shot.active, "an acorn shoots down a projectile")
-    var egg := EnemyShot.create("egg", 400.0, 300.0)
-    for i in 120:
-        egg.update(dt)
-    check(not egg.active, "eggs fall and splat on the ground")
 
     print("Matrix Fist")
     check(is_equal_approx(Game.fist_time_scale(0.0), 1.0) and is_equal_approx(Game.fist_time_scale(1.0), Game.FIST_SLOW)
@@ -960,7 +910,6 @@ func _initialize() -> void:
     var victim := Enemy.create("beaver", 420.0, 420.0)
     victim.hp = 3
     victim.max_hp = 3
-    victim.shielded = true  # the fist ignores shields
     game.layers["ground"].add_child(victim)
     game.enemies.append(victim)
     check(game.use_fist() and game.loadout.fists == 2 and game.fist_active, "F spends a charge and starts the sequence")
@@ -986,7 +935,7 @@ func _initialize() -> void:
     check(absf(min_ts - Game.FIST_SLOW) < 0.01, "the world slows to %.0f%% speed" % (min_ts * 100.0))
     check(max_x > 650.0, "the squirrel dashes across the whole screen (to x=%.0f)" % max_x)
     check(ghosts_seen >= 3, "with a ghost trail (%d afterimages)" % ghosts_seen)
-    check(victim.defeated and defeated_at >= 0.0 and defeated_at < Game.FIST_TURN_AT, "the dash starts at second 0 and punches it for 3 damage on the way out, through the shield (t=%.2f)" % defeated_at)
+    check(victim.defeated and defeated_at >= 0.0 and defeated_at < Game.FIST_TURN_AT, "the dash starts at second 0 and punches it for 3 damage on the way out (t=%.2f)" % defeated_at)
     check(absf(game.squirrel.x - Squirrel.START_X) < 0.5 and not game.fist_active and Cfg.time_scale == 1.0, "back in place at normal speed after 4 s")
     check(tint_seen > 0.1 and game.hud.matrix_tint.color.a < 0.01, "matrix tint fades in and out")
     check(invuln_ok, "no damage taken during the sequence")
@@ -1001,7 +950,6 @@ func _initialize() -> void:
     var tough := Enemy.create("beaver", 450.0, 420.0)
     tough.hp = 6
     tough.max_hp = 6
-    tough.shielded = true
     var wood := TreeProp.new()
     wood.place(600.0, 425.0)
     var shooter := Enemy.create("bird", 700.0, 380.0)
@@ -1117,6 +1065,140 @@ func _initialize() -> void:
     var c_before: int = game.loadout.coins
     game.frame(dt)
     check(game.loadout.lives == Weapons.MAX_LIVES and game.loadout.coins == c_before + 10, "at the maximum (6) a heart pays 10 coins instead")
+    print("health")
+    game.new_game()
+    _quiet(game)
+    var hl: Loadout = game.loadout
+    check(game.health == 1 and hl.max_health() == 1 and Weapons.START_HEALTH == 1, "each life starts with 1 health point")
+    check(not Weapons.DEFS.has("pouch") and Shop.rows(hl, 2, false).filter(func(r: Dictionary) -> bool: return r["id"] == Shop.HEALTH_ROW).size() == 1, "the shop sells More health (no pouch any more)")
+    hl.coins = 5
+    check(hl.health_upgrade_price() == 10 and not hl.buy_health() and hl.max_health() == 1, "More health: too expensive, nothing changes")
+    hl.coins = 1000
+    var health_spent := 0
+    for price in Weapons.HEALTH_UPGRADE_PRICES:
+        check(hl.health_upgrade_price() == price and hl.buy_health(), "level costs %d" % price)
+        health_spent += price
+    check(hl.max_health() == 6 and hl.health_upgrade_price() == -1 and not hl.buy_health() and hl.coins == 1000 - health_spent, "5 levels: up to 6 health points, then MAX")
+    check(Shop.activate(hl, Shop.HEALTH_ROW).contains("maximum"), "...with a message")
+    # at 1 health point a hit is lethal, as it always was
+    game.new_game()
+    _quiet(game)
+    game._hurt()
+    check(game.squirrel.game_over and game.health == 0, "1 health point: one hit kills")
+    # with 2 health points a hit leaves 1 and a blinking grace
+    game.new_game()
+    game.loadout.coins = 100
+    Shop.activate(game.loadout, Shop.HEALTH_ROW)
+    _quiet(game)
+    check(game.health == 2, "More health: the next run starts with 2 health points")
+    for tx in [300.0, 340.0]:  # two trees right behind each other: one contact costs one point, not two
+        var ht := TreeProp.new()
+        ht.place(tx, 425.0)
+        game.layers["trees"].add_child(ht)
+        game.trees.append(ht)
+    for i in 200:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.health == 1 and game.loadout.lives == Weapons.START_LIVES, "a tree costs 1 health point (no death, no life lost)")
+    game.hud.refresh(game._hud_state())
+    check(game.hud.health_icon.visible and game.hud.health_label.text == "1/2", "the HUD shows the first aid kit and the health (1/2)")
+    game.invuln_timer = 0.0
+    game._hurt()
+    check(game.squirrel.game_over and game.health == 0, "...and the next hit kills")
+    for i in 100:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.health == 2 and game.loadout.lives == Weapons.START_LIVES - 1, "a new life starts at full health (2)")
+    game.health = 1
+    game.loadout.lives = 3
+    game._complete_run(false)
+    game._begin_next_run()
+    check(game.health == 2, "every run starts at full health")
+    # a box side-hit is a hit like any other
+    _quiet(game)
+    var hbox := Box.new()
+    hbox.place(game.squirrel.x + 30.0, game.squirrel.y - 20.0)  # (its top is above the feet: a side-hit, not a landing)
+    game.layers["boxes"].add_child(hbox)
+    game.boxes.append(hbox)
+    for i in 30:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.health == 1, "a box's side costs 1 health point")
+    # the Diver Armor keeps its own health; the squirrel's is untouched underneath
+    game.loadout.armor_ready = true
+    _quiet(game)
+    game._hurt()
+    check(game.armored and game.armor_hp == Weapons.ARMOR_HP - 1 and game.health == 2, "in the armor, hits cost armor points, not health")
+
+    print("START_AT")
+    check(Game.first_run() == 1, "START_AT unset: a new game starts at run 1")
+    OS.set_environment("START_AT", "9")
+    game.new_game()
+    check(Game.first_run() == 9 and game.run == 9 and Game.is_boss_run(game.run), "START_AT=9: a new game starts at run 9")
+    for bad in ["", "abc", "0", "-4", "2.5"]:
+        OS.set_environment("START_AT", bad)
+        check(Game.first_run() == 1, "START_AT=\"%s\" is ignored: run 1" % bad)
+    OS.unset_environment("START_AT")
+    game.new_game()
+    check(game.run == 1, "...and unsetting it brings run 1 back")
+
+    print("opponents per run")
+    var opk_none_avail := func(_k: String) -> bool: return false
+    var opk_all_avail := func(_k: String) -> bool: return true
+    var opk_by_run := {  # the table of the design (the bird is everywhere, the pterodactyl from run 2)
+        1: ["skunk"], 2: ["skunk", "beaver"], 3: ["skunk", "beaver", "mole"], 4: ["skunk", "mole", "croco"],
+        5: ["skunk", "mole", "owl"], 6: ["skunk", "mole", "croco", "owl"], 7: ["skunk", "owl", "raccoon"],
+        8: ["skunk", "owl", "bee"], 9: ["skunk", "owl", "bee", "raccoon"],
+    }
+    for r: int in opk_by_run:
+        var opk_want: Array = opk_by_run[r].duplicate()
+        opk_want.append("bird")
+        if r >= 2:
+            opk_want.append("ptero")
+        var opk_got: Array = Game.kinds_for_run(r, opk_all_avail)
+        opk_want.sort()
+        opk_got.sort()
+        check(opk_got == opk_want, "run %d: %s" % [r, opk_want])
+        var opk_again: Array = Game.kinds_for_run(r + 9, opk_all_avail)
+        opk_again.sort()
+        check(opk_again == opk_want or (r == 1 and opk_again.size() == opk_want.size() + 1), "run %d starts over like run %d (the pterodactyl is there from run 2)" % [r + 9, r])
+    check(Game.kinds_for_run(1, opk_all_avail).has("bird") and not Game.kinds_for_run(1, opk_all_avail).has("ptero") and Game.kinds_for_run(2, opk_all_avail).has("ptero"), "bird in every run, pterodactyl from run 2")
+    var opk_fb7: Array = Game.kinds_for_run(7, opk_none_avail)
+    var opk_fb9: Array = Game.kinds_for_run(9, opk_none_avail)
+    opk_fb7.sort()
+    opk_fb9.sort()
+    check(opk_fb7 == ["bird", "croco", "ptero", "skunk"] and opk_fb9 == ["beaver", "bird", "croco", "ptero", "skunk"], "without the local art the missing ones are replaced (owl by pterodactyl, bee by beaver, raccoon by croco), never twice: %s %s" % [opk_fb7, opk_fb9])
+    var opk_plain: Array = Game.kinds_for_run(4)
+    opk_plain.sort()
+    check(opk_plain == ["bird", "croco", "mole", "ptero", "skunk"], "the default asks Enemy.is_available (the public ones are always there)")
+    # what really spawns in a run: only that run's kinds (the spawn timers are driven by hand)
+    for r in range(1, 10):
+        game.new_game()
+        game.run = r
+        game.start_run()
+        game.invuln_timer = 1e9
+        var allowed := Game.kinds_for_run(r)
+        var spawned := {}
+        for step in 160:
+            game.scroll_offset += 120.0
+            game._spawn_ground_enemies()
+            game._spawn_birds()
+            game._spawn_flyers()
+            game._spawn_ptero(true)
+            for sp_e: Enemy in game.enemies:
+                spawned[sp_e.kind] = true
+            for sp_d: Enemy in game.enemies.duplicate():
+                game._drop(game.enemies, sp_d)
+        var stray: Array = spawned.keys().filter(func(k: String) -> bool: return not allowed.has(k))
+        check(stray.is_empty() and spawned.size() == allowed.size(), "run %d spawns only %s (saw %s)" % [r, allowed, spawned.keys()])
+    game.new_game()
+    game.run = 1
+    game.start_run()
+    var gap1: float = game.gap_factor
+    game.run = 3
+    game.start_run()
+    var gap3: float = game.gap_factor
+    game.run = 4
+    game.start_run()
+    check(gap1 == 1.0 and gap3 < gap1 and is_equal_approx(game.gap_factor, 1.0), "spawns get denser over three runs, then ease off")
+
     print("Diver Armor")
     game.new_game()
     _quiet(game)
@@ -1175,7 +1257,7 @@ func _initialize() -> void:
         game.frame(dt)
     check(not game.squirrel.game_over and game.armor_hp == 26, "the boss charging into the diver costs 1 health point")
     var arm_box := Box.new()
-    arm_box.place(game.squirrel.x + 30.0, game.squirrel.y)
+    arm_box.place(game.squirrel.x + 30.0, game.squirrel.y - 20.0)  # (its top is above the feet: a side-hit, not a landing)
     game.layers["boxes"].add_child(arm_box)
     game.boxes.append(arm_box)
     for i in 30:
@@ -1245,7 +1327,60 @@ func _initialize() -> void:
         var bb := Enemy.create_boss(tier, 0.0, 0.0)
         boss_kinds.append(bb.kind)
         check(bb.rect().size.y <= 125.0 and bb.hp >= 10, "boss %s (tier %d) is jumpable (%.0f px tall) and tough (%d hp)" % [bb.kind, tier, bb.rect().size.y, bb.hp])
-    check(boss_kinds == ["boss_beaver", "boss_boar", "boss_skunk", "boss_beaver", "boss_boar", "boss_skunk"], "bosses cycle beaver, boar, skunk %s" % [boss_kinds])
+    check(boss_kinds == ["boss_beaver", "boss_boar", "boss_virus", "boss_beaver", "boss_boar", "boss_virus"], "bosses cycle beaver, boar, virus monster %s" % [boss_kinds])
+    # the virus monster lobs viruses with its tail instead of spitting fire
+    var vb := Enemy.create_boss(2, 540.0, 310.0)
+    vb.boss_state = "idle"
+    vb.shoot_cd = 0.0
+    var frames_seen := {}
+    var thrown_at := -1.0
+    var t := 0.0
+    var fire_seen := false
+    var cut_short := false
+    var was_idle_throwing := false
+    for i in 200:
+        was_idle_throwing = vb.boss_state == "idle" and vb.virus_t >= 0.0
+        vb.update(3.0, dt)
+        cut_short = cut_short or (was_idle_throwing and vb.boss_state != "idle" and vb.virus_t >= 0.0)
+        t += dt
+        frames_seen[vb.frame_idx] = true
+        var shot := vb.take_shot()
+        fire_seen = fire_seen or shot == "fire"
+        if shot == "virus" and thrown_at < 0.0:
+            thrown_at = t
+    check(thrown_at > 0.5 and thrown_at < 1.2 and not fire_seen, "the virus monster throws a virus about 0.8 s into its throw (%.2f s), no fireballs" % thrown_at)
+    if vb.cfg["frames"].size() >= 9:
+        check(frames_seen.has(0) and frames_seen.has(4) and frames_seen.has(6) and frames_seen.has(8), "...playing its throwing poses (frames %s)" % [frames_seen.keys()])
+    check(not cut_short and vb.boss_state != "enter", "...and a throw is never cut short by the end of its stand (it then warns and charges)")
+    var lobbed := EnemyShot.create("virus", 600.0, 330.0, Vector2(70.0, 484.0))
+    var lob_near := 9999.0
+    var lob_apex := 9999.0
+    while lobbed.active:
+        lobbed.update(dt)
+        lob_near = minf(lob_near, absf(lobbed.rect().get_center().x - 70.0)) if lobbed.y + lobbed.h > 440.0 else lob_near
+        lob_apex = minf(lob_apex, lobbed.y)
+    check(lob_near < 25.0 and lob_apex < 330.0, "a lobbed virus arcs up and comes down on the squirrel (apex y=%.0f, %.0f px off)" % [lob_apex, lob_near])
+    game.new_game()
+    _quiet(game)
+    var flying := EnemyShot.create("virus", 600.0, 330.0, Vector2(game.squirrel.x + 20.0, game.squirrel.y + 40.0))
+    game.layers["shots"].add_child(flying)
+    game.enemy_shots.append(flying)
+    for i in 90:
+        game.frame(dt)
+        if game.squirrel.game_over:
+            break
+    check(game.squirrel.game_over, "a virus that lands on the squirrel is lethal")
+    game.new_game()
+    _quiet(game)
+    game.squirrel.velocity_y = Cfg.JUMP_STRENGTH  # jumps over it
+    var dodged := EnemyShot.create("virus", 600.0, 330.0, Vector2(game.squirrel.x + 20.0, game.squirrel.y + 40.0))
+    game.layers["shots"].add_child(dodged)
+    game.enemy_shots.append(dodged)
+    game.squirrel.y = 300.0
+    game.squirrel.velocity_y = -2.0
+    var shot_down := Shot.create("acorn", dodged.x - 5.0, dodged.y)
+    game._shot_hits_enemy_shots(shot_down)
+    check(not dodged.active, "an acorn shoots a virus down")
 
 
     print("sound")
@@ -1416,7 +1551,7 @@ func _initialize() -> void:
     check(cp.stock_left("chestnut") == 19 and game.acorns == 3 and game.shots.size() == 1 and game.shots[0].kind == "chestnut", "D throws a chestnut, not an acorn, whatever weapon is equipped")
     game.frame(dt)
     check(game.hud.chestnut_label.visible and game.hud.chestnut_label.text == "x19  [D]", "the HUD shows a chestnut with the count and the key (%s)" % game.hud.chestnut_label.text)
-    check(game.hud.fist_icon.visible == false and game.hud.chestnut_icon.position.y == 102.0, "...in the fist's place when there is no fist")
+    check(game.hud.fist_icon.visible == false and game.hud.chestnut_icon.position.y == 130.0, "...in the fist's place when there is no fist")
     game.loadout.fists = 2
     game.frame(dt)
     check(game.hud.chestnut_icon.position.y > game.hud.fist_icon.position.y, "...and under it when there are fists")
@@ -1563,7 +1698,7 @@ func _initialize() -> void:
     game._menu_input(af_down)
     check(game._shop_rows()[game.shop_selection]["id"] == "boomerang", "DOWN walks over payable rows")
     game._menu_input(af_down)
-    check(game._shop_rows()[game.shop_selection]["id"] == Shop.AMMO_ROW, "DOWN skips what costs too much (chestnut, pinecone, ..., Matrix Fist, Extra Life)")
+    check(game._shop_rows()[game.shop_selection]["id"] == Shop.HEALTH_ROW, "DOWN skips what costs too much (chestnut, pinecone, ..., Matrix Fist, Extra Life)")
     game._menu_input(af_down)
     check(game._shop_rows()[game.shop_selection]["id"] == Shop.NEXT_RUN_ROW, "...down to 'start run'")
     game._menu_input(af_down)
