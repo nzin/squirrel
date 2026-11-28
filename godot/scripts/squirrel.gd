@@ -13,6 +13,24 @@ var ground_y := 0.0
 var prev_x := 0.0
 var prev_y := 0.0
 var game_over := false
+var diver := false  # drawn as the diver (Diver Armor run, art installed)
+var _anim := 0.0
+var armor_frac := 1.0:  # Diver Armor health (1 = full): drawn as a small bar over the diver
+    set(v):
+        armor_frac = v
+        queue_redraw()
+var hurt_flash := 0.0   # physics ticks left of the red tint after a hit
+
+const DIVER_FRAMES := ["res://private/diver_1.png", "res://private/diver_2.png", "res://private/diver_3.png",
+    "res://private/diver_4.png", "res://private/diver_5.png"]
+const HURT_FLASH_TICKS := 8.0
+const DIVER_FRAME_TICKS := 7.0  # physics ticks per walk-cycle frame
+const DIVER_HEIGHT := 68.0      # drawn height (the physics box stays 40x40)
+const DIVER_SHIFT_X := 12.0     # the art's gun sticks out to the right: nudge it so the body sits on the box
+const DIVER_MUZZLE := 30.0      # how much further right than the box the harpoon leaves
+const DIVER_MUZZLE_RISE := 20.0 # ...and how much higher: the gun is held above the middle
+static var _diver_art: Array[Texture2D] = []
+static var _diver_checked := false
 
 
 func _init() -> void:
@@ -26,6 +44,73 @@ func _ready() -> void:
     sprite.centered = true  # rotate around the middle on game over
     sprite.position = Vector2(w / 2.0, h / 2.0)
     reset()
+
+
+## The optional Diver Armor frames (walk cycle), or [] when the local art is absent
+## (godot/private/, see CREDITS.md): the squirrel sprite is then kept.
+static func diver_art() -> Array[Texture2D]:
+    if not _diver_checked:
+        _diver_checked = true
+        var frames: Array[Texture2D] = []
+        for f: String in DIVER_FRAMES:
+            if not ResourceLoader.exists(f):
+                frames.clear()
+                break
+            frames.append(load(f))
+        _diver_art = frames
+    return _diver_art
+
+
+## Wear (or take off) the Diver Armor. The 40x40 physics box never changes (landing and
+## collisions behave as before); only the picture gets bigger, standing on the box's bottom.
+func set_diver(on: bool) -> void:
+    diver = on and not diver_art().is_empty()
+    _anim = 0.0
+    _show_frame()
+    queue_redraw()
+
+
+## A hit on the armor: tint the sprite red for a few ticks.
+func flash_hurt() -> void:
+    hurt_flash = HURT_FLASH_TICKS
+
+
+func _draw() -> void:
+    if not diver:
+        return
+    var bar_w := 40.0
+    var top := h - DIVER_HEIGHT - 9.0
+    draw_rect(Rect2(0.0, top, bar_w, 5.0), Color(0, 0, 0, 0.6))
+    var f := clampf(armor_frac, 0.0, 1.0)
+    draw_rect(Rect2(1.0, top + 1.0, (bar_w - 2.0) * f, 3.0), Color(1.0 - f, 0.4 + 0.5 * f, 0.15))
+
+
+func _show_frame() -> void:
+    if sprite == null:
+        return
+    if not diver:
+        var tex := Cfg.tex("squirrel.png")
+        sprite.texture = tex
+        sprite.scale = Vector2(w / tex.get_width(), h / tex.get_height())
+        sprite.position = Vector2(w / 2.0, h / 2.0)
+        return
+    var art := diver_art()
+    var frame_tex: Texture2D = art[int(_anim / DIVER_FRAME_TICKS) % art.size()]
+    sprite.texture = frame_tex
+    var s := DIVER_HEIGHT / frame_tex.get_height()
+    sprite.scale = Vector2(s, s)
+    # horizontally on the box, feet on its bottom edge
+    sprite.position = Vector2(w / 2.0 + DIVER_SHIFT_X, h - DIVER_HEIGHT / 2.0)
+
+
+## y where a shot leaves the player (the vertical middle; the gun's height for the diver).
+func muzzle_y() -> float:
+    return y + int(h / 2.0) - (DIVER_MUZZLE_RISE if diver else 0.0)
+
+
+## x where a shot leaves the player (the gun's muzzle for the diver).
+func muzzle_x() -> float:
+    return x + w + (DIVER_MUZZLE if diver else 0.0)
 
 
 func reset() -> void:
@@ -153,4 +238,11 @@ func update(boxes: Array, clouds: Array) -> void:
         is_jumping = false
 
     sprite.rotation = -PI / 2.0 if game_over else 0.0  # lies on its side
+    if diver:
+        _anim += Cfg.time_scale
+        _show_frame()
+    if hurt_flash > 0.0:
+        hurt_flash -= Cfg.time_scale
+    var tint := Color(1.0, 0.35, 0.35) if hurt_flash > 0.0 else Color.WHITE
+    sprite.modulate = Color(tint.r, tint.g, tint.b, sprite.modulate.a)  # (alpha belongs to the blinking)
     sync()

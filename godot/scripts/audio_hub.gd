@@ -22,7 +22,7 @@ const LEVELS_DB := {
     "ui_move": -16.0, "ui_select": -11.0, "ui_back": -11.0, "pause": -9.0, "land": -9.0,
     "hit": -5.0, "coin": -6.0, "box_bump": -6.0, "warn": -10.0, "no_money": -9.0,
     "dwarf_blip": -13.0, "dwarf_laugh": -8.0, "throw_acorn": -7.0, "throw_spread": -7.0,
-    "throw_boomerang": -8.0, "throw_chestnut": -9.0, "throw_pinecone": -6.0, "throw_rainbow": -8.0,
+    "throw_boomerang": -8.0, "throw_chestnut": -9.0, "throw_pinecone": -6.0, "throw_harpoon": -8.0,
     "throw_homing": -8.0, "jump": -8.0, "splat": -8.0, "mole_pop": -6.0, "stomp": -4.0,
     "dive": -8.0, "pounce": -8.0, "roll": -6.0, "hiss": -8.0, "fireball": -5.0, "whoosh": -6.0,
     "smash": -5.0, "shield_clang": -4.0, "enemy_defeat": -4.0, "rainbow_collect": -5.0,

@@ -251,7 +251,7 @@ def sfx_table():
     add("throw_boomerang", lambda: [a + b * 0.3 for a, b in zip(swept_noise(0.4, 400, 3000, 0.9), sweep(260, 520, 0.4, tau=0.3, vib=0.04))])
     add("throw_chestnut", lambda: sweep(220, 520, 0.22, vib=0.05, tau=0.12))
     add("throw_pinecone", lambda: [a + b for a, b in zip(sweep(160, 70, 0.2, tau=0.07), noise(0.2, lp=900, tau=0.05, vol=0.4))])
-    add("throw_rainbow", lambda: sweep(1800, 280, 0.28, shape="saw", tau=0.16, harmonics=5))
+    add("throw_harpoon", lambda: [a + b * 0.5 for a, b in zip(sweep(640, 150, 0.22, shape="saw", tau=0.09, harmonics=3), swept_noise(0.22, 3500, 500, 0.8, "down"))])
     add("throw_homing", lambda: (lambda o: (mix_into(o, sweep(620, 900, 0.08, tau=0.05), 0), mix_into(o, sweep(820, 1250, 0.1, tau=0.06), 0.09), o)[2])(silence(0.25)))
     add("boom", lambda: [a + b for a, b in zip(swept_noise(0.7, 2500, 90, 1.2, "down"), sweep(95, 38, 0.7, tau=0.2))] )
     add("hit", lambda: [a + b for a, b in zip(noise(0.07, lp=3500, tau=0.02, vol=0.9), sweep(320, 140, 0.1, tau=0.04))])

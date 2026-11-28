@@ -18,7 +18,7 @@ extends Entity
 ## Kinds marked "private_only" (bee, owl, raccoon) use licensed local-only art: see is_available().
 ## (owl and bee use `wave` with their own "wave_amp" / "wave_freq": a slow wide
 ## swoop and a fast jittery zigzag)
-## Protection: `shielded` blocks shots from the front (not rainbow, bombs, or a
+## Protection: `shielded` blocks shots from the front (not bombs, or a
 ## returning boomerang); extra hp from armor in later runs; `enraged` below
 ## half hp (faster, from run 4 only). Shooting ("shoot": gas / egg / fire) only from `shoot_from`.
 ## All movement is multiplied by Cfg.time_scale so slow motion stays smooth.
@@ -321,7 +321,7 @@ func hittable() -> bool:
 
 
 ## Does the shield stop `sh`? Only shots coming from the front, and not the ones that
-## break shields (rainbow beam) - bombs use blast damage instead.
+## break shields (a shot with `breaks_shield`) - bombs use blast damage instead.
 func blocks(sh: Shot) -> bool:
     if sh.breaks_shield:
         return false

@@ -7,13 +7,18 @@ extends Entity
 ##   boomerang  flies out, returns; pierces, each enemy hit once per leg
 ##   chestnut   arcs, bounces along the ground, explodes on contact or its 3rd bounce
 ##   pinecone   slow lob; detonates on contact/ground, area damage
-##   rainbow    fast pierce, 2 damage
+##   harpoon    thrown by the Diver Armor: flies like a plain acorn
 ##   homing     steers toward the nearest enemy ahead
 
 const BODY := Color8(139, 90, 43)
 const CAP := Color8(101, 67, 33)
-const RAINBOW := [Color8(230, 40, 40), Color8(250, 140, 30), Color8(250, 220, 40),
-    Color8(60, 190, 70), Color8(50, 120, 230), Color8(150, 70, 200)]
+## Optional licensed harpoon picture (head + a short rod), local-only like the explosions.
+const HARPOON_ART := "res://private/diver_harpoon.png"
+const HARPOON_HEAD_W := 27.0  # drawn width of that picture (the rod is drawn behind it)
+const STEEL := Color8(150, 175, 185)
+const STEEL_DARK := Color8(25, 25, 30)
+static var _harpoon_art: Texture2D = null
+static var _harpoon_checked := false
 const BLAST_TICKS := 14
 const CHESTNUT_BOUNCES := 3       # it explodes on the third bounce
 const CHESTNUT_BLAST_TICKS := 22  # a longer explosion: it plays a 9-frame animation
@@ -104,13 +109,9 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
             gravity = 0.25
             damage = 2
             blast_radius = 100.0
-        "rainbow":
-            w = 50.0
-            h = 12.0
-            vx = 14.0
-            damage = 2
-            pierce = true
-            breaks_shield = true
+        "harpoon":
+            w = 42.0
+            h = 24.0
         "homing":
             w = 15.0
             h = 20.0
@@ -119,6 +120,27 @@ func setup(shot_kind: String, px: float, py: float, dy: float) -> void:
         blast_ticks = _ticks_for(_choose_burst(false))
     place(px, py + 10.0 - h / 2.0)  # a 20 px acorn keeps its original spawn point
     origin_x = x
+
+
+## A purely visual explosion (no damage: `exploded` is already set so Game never blasts),
+## centred on `at`, with the chestnut's animation scaled to `radius`.
+static func create_blast(at: Vector2, radius: float) -> Shot:
+    var s := Shot.create("chestnut", at.x, at.y)
+    s.place(at.x - s.w / 2.0, at.y - s.h / 2.0)
+    s.damage = 0
+    s.blast_radius = radius
+    s.exploded = true
+    s.detonate()
+    return s
+
+
+## The optional harpoon picture, or null when the local art is absent.
+static func harpoon_art() -> Texture2D:
+    if not _harpoon_checked:
+        _harpoon_checked = true
+        if ResourceLoader.exists(HARPOON_ART):
+            _harpoon_art = load(HARPOON_ART)
+    return _harpoon_art
 
 
 ## The optional ground-burst frames, or [] when the local art is absent.
@@ -310,13 +332,27 @@ func _draw() -> void:
             for i in 3:
                 var ly := h * (0.3 + 0.2 * i)
                 draw_line(Vector2(3, ly), Vector2(w - 3, ly), Color8(95, 60, 25), 2.0)
-        "rainbow":
-            for i in RAINBOW.size():
-                draw_rect(Rect2(0, i * h / RAINBOW.size(), w, h / RAINBOW.size() + 0.5), RAINBOW[i])
+        "harpoon":
+            _draw_harpoon()
         "boomerang":
             draw_set_transform(c, spin)
             draw_arc(Vector2.ZERO, 10.0, PI * 0.2, PI * 1.3, 14, Color8(215, 165, 70), 6.0)
             draw_set_transform(Vector2.ZERO, 0.0)
+
+
+## A steel rod ending in an arrowhead: the diver's picture when installed, else a drawn one.
+func _draw_harpoon() -> void:
+    var mid := h / 2.0
+    var art := harpoon_art()
+    var head_w := HARPOON_HEAD_W if art != null else 14.0
+    draw_rect(Rect2(0, mid - 1.5, w - head_w + 2.0, 3.0), STEEL_DARK)
+    draw_rect(Rect2(0, mid - 0.5, w - head_w + 2.0, 1.5), STEEL)
+    if art != null:
+        draw_texture_rect(art, Rect2(w - head_w, 0, head_w, h), false)
+    else:
+        var tip := PackedVector2Array([Vector2(w, mid), Vector2(w - head_w, 0), Vector2(w - head_w + 4.0, mid), Vector2(w - head_w, h)])
+        draw_colored_polygon(tip, STEEL)
+        draw_polyline(PackedVector2Array([tip[0], tip[1], tip[2], tip[3], tip[0]]), STEEL_DARK, 2.0)
 
 
 ## Shared by thrown acorns and the PopupAcorn that flies out of boxes.

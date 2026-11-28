@@ -16,10 +16,15 @@ const RUN_BONUS_PER_RUN := 5 # completion bonus = this x run number (coins)
 const COMPLETE_DELAY := 1.8  # "RUN COMPLETE" banner time before the fade
 const RESPAWN_DELAY := 1.4   # seconds lying down before getting back up (lives left)
 const INVULN_TIME := 2.5     # blinking invulnerability after a respawn
+const ARMOR_BREAK_GRACE := 1.5  # ...and after the Diver Armor breaks
 const FLASH_TIME := 0.22     # the white flash at the start of an explosion
 const FLASH_STRENGTH := 0.65
 const FADE_TIME := 0.45
 const ANNOUNCE_TIME := 2.0
+## The boss goes down in a string of big explosions: [seconds after the kill, offset from its
+## centre as a fraction of its size, blast radius]. The first is bigger than any chestnut.
+const BOSS_BLASTS := [[0.0, Vector2(0.0, 0.0), 130.0], [0.25, Vector2(-0.3, -0.15), 90.0],
+    [0.45, Vector2(0.3, 0.1), 95.0], [0.65, Vector2(-0.1, 0.25), 90.0], [0.85, Vector2(0.15, -0.25), 110.0]]
 const BOSS_VICTORY_TIME := 2.0  # the game keeps running this long after the boss falls, before the run ends
 
 # Matrix Fist timeline (real seconds): the attack starts at second 0 - the squirrel
@@ -72,12 +77,15 @@ var paused := false
 # --- run state ---
 var acorns := Weapons.START_AMMO
 var weapon := "acorn"          # equipped weapon id (see Weapons)
+var armored := false           # wearing the Diver Armor: no jump, harpoons, armor_hp health points
+var armor_hp := 0              # Weapons.ARMOR_HP at the start of an armored run; at 0 the armor breaks
 var run_time := 0.0
 var scroll_speed := Cfg.SCROLL_SPEED
 var gap_factor := 1.0          # < 1 = enemies spawn closer together
 var scroll_offset := 0.0
 var boss: Enemy = null
 var boss_spawned := false
+var boss_blasts_fired := 0     # how many of BOSS_BLASTS have gone off
 var boss_down_time := -1.0     # seconds since the boss was defeated (-1 = still standing)
 var complete_timer := 0.0
 var complete_bonus := 0
@@ -224,10 +232,14 @@ func start_run() -> void:
     boss = null
     boss_spawned = false
     boss_down_time = -1.0
+    boss_blasts_fired = 0
     announce_text = ""
     announce_timer = 0.0
     acorns = loadout.acorns_for_next_run()  # kept from the previous run (see Loadout)
-    weapon = loadout.equipped
+    armored = loadout.armor_ready  # worn for this whole run, then spent
+    loadout.armor_ready = false
+    armor_hp = Weapons.ARMOR_HP if armored else 0
+    weapon = "harpoon" if armored else loadout.equipped
     var d := float(run - 1)
     scroll_speed = Cfg.SCROLL_SPEED + 0.25 * minf(d, 8.0)
     gap_factor = 1.0 / (1.0 + 0.12 * d)
@@ -275,6 +287,8 @@ func start_run() -> void:
             cx += c.w + Cfg.CLOUD_SPACING
 
     squirrel.reset()
+    squirrel.set_diver(armored)
+    squirrel.armor_frac = 1.0
     background.set_scroll(0.0)
 
 
@@ -295,9 +309,13 @@ func _advance_run(delta: float) -> void:
     if announce_timer > 0.0:
         announce_timer -= delta
     if boss_spawned:
-        if boss != null and boss.defeated:
+        # once the boss has fallen the countdown must not depend on its node: it drops off screen
+        # (and is freed) after about a second, sometimes before the 2 s are up
+        if boss_down_time >= 0.0 or (boss != null and boss.defeated):
             # the world keeps going for a moment so the kill can be enjoyed, then the run ends
             boss_down_time = maxf(boss_down_time, 0.0) + delta
+            if boss != null:
+                _boss_explosions()
             if boss_down_time >= BOSS_VICTORY_TIME:
                 _complete_run(true)
     elif run_time >= RUN_SECONDS:
@@ -305,6 +323,20 @@ func _advance_run(delta: float) -> void:
             _spawn_boss()
         else:
             _complete_run(false)
+
+
+## Fires the boss's death blasts as their time comes (visual only: no damage).
+func _boss_explosions() -> void:
+    while boss_blasts_fired < BOSS_BLASTS.size() and boss_down_time >= BOSS_BLASTS[boss_blasts_fired][0]:
+        var plan: Array = BOSS_BLASTS[boss_blasts_fired]
+        var br := boss.rect()
+        var at := br.get_center() + Vector2((plan[1] as Vector2).x * br.size.x, (plan[1] as Vector2).y * br.size.y)
+        var sh := Shot.create_blast(at, plan[2])
+        _add_shot(sh)
+        audio.sfx("boom", 0.1)
+        if boss_blasts_fired == 0:
+            flash = 1.0
+        boss_blasts_fired += 1
 
 
 func _spawn_boss() -> void:
@@ -338,7 +370,7 @@ func _complete_run(boss_defeated: bool) -> void:
 func _enter_shop() -> void:
     phase = "shop"
     menu_state = "shop"
-    shop_selection = 0
+    shop_selection = _shop_step(_shop_rows(), -1, 1)  # the first row the player can pay
     shop_mood = "idle"
     shop_message = Lang.t("Welcome! Take a look at my wares.")
     audio.sfx("shop_bell", 0.0)
@@ -404,6 +436,8 @@ func _platforms() -> Array:
 
 
 func do_jump() -> void:
+    if armored:  # the diver armor is too heavy to jump in
+        return
     var before := squirrel.velocity_y
     squirrel.jump(boxes, _platforms())
     if squirrel.velocity_y < before:
@@ -423,8 +457,8 @@ func do_throw() -> void:
             return
     acorns -= cost
     audio.sfx("throw_" + id)
-    var sx := squirrel.x + squirrel.w
-    var sy := squirrel.y + int(squirrel.h / 2.0)
+    var sx := squirrel.muzzle_x()
+    var sy := squirrel.muzzle_y()
     match id:
         "spread":
             for dy: float in [-2.5, 0.0, 2.5]:
@@ -439,7 +473,7 @@ func throw_chestnut() -> bool:
         return false
     loadout.stock["chestnut"] = loadout.stock_left("chestnut") - 1
     audio.sfx("throw_chestnut")
-    _add_shot(Shot.create("chestnut", squirrel.x + squirrel.w, squirrel.y + int(squirrel.h / 2.0)))
+    _add_shot(Shot.create("chestnut", squirrel.muzzle_x(), squirrel.muzzle_y()))
     return true
 
 
@@ -450,6 +484,8 @@ func _add_shot(s: Shot) -> void:
 
 ## Switch to the next owned weapon (Q).
 func cycle_weapon() -> void:
+    if armored:  # the armor's harpoon gun is the only weapon this run
+        return
     var owned: Array[String] = []
     for id in Weapons.ORDER:
         if loadout.owns(id) and not Weapons.DEFS[id].has("stock"):  # consumables have their own key
@@ -547,6 +583,18 @@ func _shop_rows() -> Array[Dictionary]:
     return Shop.rows(loadout, run + 1, is_boss_run(run + 1))
 
 
+## Index of the next enabled shop row after `from` in direction `dir` (+1 / -1), wrapping.
+## Rows the player cannot pay are skipped; the "start run" row is always enabled.
+static func _shop_step(rows: Array[Dictionary], from: int, dir: int) -> int:
+    var n := rows.size()
+    var i := from
+    for _k in n:
+        i = posmod(i + dir, n)
+        if rows[i]["enabled"]:
+            return i
+    return from
+
+
 func _menu_input(event: InputEvent) -> void:
     match menu_state:
         "main", "pause":
@@ -584,8 +632,7 @@ func _menu_input(event: InputEvent) -> void:
         "shop":
             var rows := _shop_rows()
             if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
-                var step := rows.size() - 1 if event.is_action_pressed("ui_up") else 1
-                shop_selection = (shop_selection + step) % rows.size()
+                shop_selection = _shop_step(rows, shop_selection, -1 if event.is_action_pressed("ui_up") else 1)
                 shop_message = ""
                 shop_mood = "idle"
                 audio.sfx("ui_move", 0.0)
@@ -608,6 +655,9 @@ func _menu_input(event: InputEvent) -> void:
                     else:
                         audio.sfx("no_money", 0.0)
                     audio.speak(shop_message)
+                    var after := _shop_rows()
+                    if not after[shop_selection]["enabled"]:  # the purchase left too few coins for this row
+                        shop_selection = _shop_step(after, shop_selection, 1)
         _:
             if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
                 audio.sfx("ui_back", 0.0)
@@ -859,7 +909,7 @@ func frame(delta: float) -> void:
         audio.sfx("land")
     _was_jumping = squirrel.is_jumping
     _apply_fist_motion()
-    if invuln_timer > 0.0 and squirrel.game_over:
+    if (invuln_timer > 0.0 or armored) and squirrel.game_over:
         squirrel.game_over = false  # blinking after a respawn: boxes can't kill either
     _begin_game_over_if_needed()
 
@@ -1015,7 +1065,7 @@ func _hud_state() -> Dictionary:
         "score": score, "acorns": acorns, "coins": loadout.coins, "best": profile.best_score,
         "weapon": weapon_def["name"], "weapon_ammo": weapon_def["ammo"], "chestnuts": loadout.stock_left("chestnut"),
         "run": run, "in_run": phase == "run",
-        "fists": loadout.fists, "lives": loadout.lives,
+        "fists": loadout.fists, "lives": loadout.lives, "armored": armored, "armor_hp": armor_hp,
         "matrix": clampf((1.0 - Cfg.time_scale) / (1.0 - FIST_SLOW), 0.0, 1.0),
         "time_left": maxf(0.0, RUN_SECONDS - run_time), "progress": run_time / RUN_SECONDS,
         "is_boss_run": is_boss_run(run),
@@ -1284,6 +1334,32 @@ func _damage_enemy(e: Enemy, dmg: int) -> void:
         audio.sfx("hit")
 
 
+## The squirrel was touched by something dangerous. In the Diver Armor that costs one health
+## point (and the armor breaks at 0); otherwise it is lethal.
+func _hurt() -> void:
+    if not armored:
+        squirrel.game_over = true
+        return
+    armor_hp = maxi(0, armor_hp - 1)
+    squirrel.armor_frac = float(armor_hp) / Weapons.ARMOR_HP
+    squirrel.flash_hurt()
+    audio.sfx("hit")
+    if armor_hp <= 0:
+        _break_armor()
+
+
+## 0 health points: the armor falls off and the run goes on as the plain squirrel (no life is lost).
+func _break_armor() -> void:
+    armored = false
+    armor_hp = 0
+    squirrel.set_diver(false)
+    weapon = loadout.equipped
+    invuln_timer = ARMOR_BREAK_GRACE  # blinks for a moment, like after a respawn
+    announce_text = Lang.t("ARMOR BROKEN!")
+    announce_timer = ANNOUNCE_TIME
+    audio.sfx("life_lost")
+
+
 ## An enemy/tree is only lethal when it reaches the squirrel's front (left side
 ## of the obstacle) - you can jump over or walk through the rest of it.
 func _crossed(prev_left: float, left: float) -> bool:
@@ -1296,13 +1372,14 @@ func _check_hazards() -> void:
     if not _fist_ghosted() and invuln_timer <= 0.0:  # a dashing ghost / a blinking respawn can't be hurt
         for t in trees:
             if t.active and t.rect().intersects(sr) and _crossed(t.prev_x + t.hit_dx(), t.x + t.hit_dx()):
-                squirrel.game_over = true
-        for e in enemies:
+                _hurt()
+        for e in enemies:  # (the boss too: its charge crosses the squirrel like any enemy)
             if e.hittable() and e.rect().intersects(sr) and _crossed(e.prev_x + e.hit_dx(), e.x + e.hit_dx()):
-                squirrel.game_over = true
+                _hurt()
         for es in enemy_shots:  # projectiles hurt on any contact
-            if es.active and es.rect().intersects(sr):
-                squirrel.game_over = true
+            if es.active and es.rect().intersects(sr) and not es.hurt_player:
+                es.hurt_player = true  # (a lingering gas cloud costs one point, not one per tick)
+                _hurt()
     _begin_game_over_if_needed()
 
     for r in rainbows:

@@ -385,7 +385,7 @@ func _initialize() -> void:
     game._update_shots()
     check(near1.defeated and near2.defeated and not far1.defeated, "pinecone blast hits nearby enemies only")
 
-    # rainbow beam pierces everything in line and survives
+    # a piercing shot (the boomerang's trait) hits everything in line and survives
     game.new_game()
     _quiet(game)
     var r1 := Enemy.create("skunk", 400.0, 400.0)
@@ -393,9 +393,12 @@ func _initialize() -> void:
     for en in [r1, r2]:
         game.layers["ground"].add_child(en)
         game.enemies.append(en)
-    var beam := Shot.create("rainbow", 420.0, 440.0)
+    var beam := Shot.create("acorn", 420.0, 440.0)
+    beam.w = 50.0
+    beam.damage = 2
+    beam.pierce = true
     game._shot_hits_enemies(beam)
-    check(r1.defeated and r2.defeated and beam.active, "rainbow beam pierces and keeps going")
+    check(r1.defeated and r2.defeated and beam.active, "a piercing shot hits everything in line and keeps going")
 
     # homing acorn curves up to an enemy that is not on its path
     game.new_game()
@@ -494,8 +497,10 @@ func _initialize() -> void:
     pr.coins = 40
     check(Shop.activate(pr, "spread").begins_with("Bought") and pr.coins == 25 and pr.equipped == "spread", "buy + auto-equip a weapon")
     check(Shop.activate(pr, "homing") == "Not enough coins." and pr.coins == 25 and not pr.owns("homing"), "too expensive: nothing changes")
-    Shop.activate(pr, "acorn")
-    check(pr.equipped == "acorn" and pr.coins == 25, "owned weapons equip for free")
+    pr.carried_acorns = 3
+    check(Shop.activate(pr, "acorn") == "Bought Acorn x10!" and pr.equipped == "acorn" and pr.coins == 20 and pr.acorns_for_next_run() == 13, "the Acorn row sells 10 acorns for 5 coins (and equips the acorn)")
+    pr.coins = 25
+    pr.carried_acorns = 3
     check(Shop.activate(pr, Shop.AMMO_ROW) == "Pouch upgraded!" and pr.coins == 15 and pr.ammo_level == 1, "buy +1 starting acorn")
     game.start_run()
     check(game.acorns == 4 and game.loadout.coins == 15, "next run keeps purchases; the Bigger Pouch raises the starting minimum to 4")
@@ -625,11 +630,22 @@ func _initialize() -> void:
     game.frame(dt)
     game._damage_enemy(game.boss, 999)
     var coins_before: int = game.loadout.coins
+    var bystander := Enemy.create("croco", game.boss.x + 20.0, 420.0)  # near the boss's blasts: must not be hurt by them
+    game.layers["ground"].add_child(bystander)
+    game.enemies.append(bystander)
+    var by_hp := bystander.hp
+    var max_blast := 0.0
+    var big_flash := false
     for i in 110:  # ~1.8 s after the kill the game is still running
         game.frame(dt)
+        big_flash = big_flash or game.flash > 0.9
+        for sh: Shot in game.shots:
+            if sh.exploding:
+                max_blast = maxf(max_blast, sh.blast_radius)
     var still_running: bool = game.phase == "run" and game.fade_dir == 0
     for i in 20:
         game.frame(dt)
+    check(game.boss_blasts_fired == Game.BOSS_BLASTS.size() and max_blast > 75.0 and big_flash and bystander.hp == by_hp, "the boss goes down in a string of explosions bigger than a chestnut's (%d blasts, radius %.0f), with a flash, and they hurt nobody" % [game.boss_blasts_fired, max_blast])
     check(still_running, "the game keeps running for ~2 s after the boss is defeated")
     check(game.phase == "run_complete" and game.complete_boss, "...then defeating the boss completes the run")
     check(game.loadout.coins >= coins_before + Game.RUN_BONUS_PER_RUN * 3 and game.score >= 10, "boss pays coins and 10 points")
@@ -830,9 +846,13 @@ func _initialize() -> void:
     game._shot_hits_enemies(back)
     check(sb.hp == 1, "...but hits from behind on the way back")
     sb.hp = 2
-    var beam2 := Shot.create("rainbow", 280.0, 440.0)
+    var beam2 := Shot.create("acorn", 280.0, 440.0)
+    beam2.w = 50.0
+    beam2.damage = 2
+    beam2.pierce = true
+    beam2.breaks_shield = true
     game._shot_hits_enemies(beam2)
-    check(sb.defeated, "the rainbow beam breaks shields")
+    check(sb.defeated, "a shot flagged breaks_shield ignores shields")
     var sb2 := Enemy.create("beaver", 300.0, 420.0)
     sb2.shielded = true
     game.layers["ground"].add_child(sb2)
@@ -1097,6 +1117,111 @@ func _initialize() -> void:
     var c_before: int = game.loadout.coins
     game.frame(dt)
     check(game.loadout.lives == Weapons.MAX_LIVES and game.loadout.coins == c_before + 10, "at the maximum (6) a heart pays 10 coins instead")
+    print("Diver Armor")
+    game.new_game()
+    _quiet(game)
+    check(not Weapons.ORDER.has("rainbow") and not Weapons.ORDER.has("harpoon") and Weapons.DEFS.has("harpoon"), "no rainbow beam; the harpoon is not sold")
+    game.loadout.coins = 100
+    var arm_row := func() -> Dictionary:
+        return Shop.rows(game.loadout, 2, false).filter(func(r: Dictionary) -> bool: return r["id"] == Shop.ARMOR_ROW)[0]
+    check(arm_row.call()["enabled"] and arm_row.call()["status"] == Lang.t("%d coins", [Weapons.ARMOR_PRICE]), "the shop offers the Diver Armor")
+    check(Shop.activate(game.loadout, Shop.ARMOR_ROW).contains("ready") and game.loadout.armor_ready and game.loadout.coins == 100 - Weapons.ARMOR_PRICE, "buying it pays and arms the next run")
+    check(arm_row.call()["status"] == Lang.t("READY") and not arm_row.call()["enabled"], "...the row then reads READY and is disabled")
+    check(Shop.activate(game.loadout, Shop.ARMOR_ROW).contains("already") and game.loadout.coins == 100 - Weapons.ARMOR_PRICE, "...and cannot be bought twice")
+    var poor := Loadout.new()
+    check(not poor.buy_armor() and not poor.armor_ready, "not enough coins: no armor")
+    _quiet(game)  # (starts the next run)
+    check(game.armored and not game.loadout.armor_ready and game.weapon == "harpoon" and game.loadout.equipped == "acorn", "the next run wears it (and uses it up) and throws harpoons")
+    game.do_jump()
+    check(game.squirrel.velocity_y == 0.0 and not game.squirrel.is_jumping, "the armor cannot jump")
+    game.weapon = "harpoon"
+    game.cycle_weapon()
+    check(game.weapon == "harpoon", "...nor switch weapons")
+    game.acorns = 5
+    game.do_throw()
+    check(game.shots.size() == 1 and game.shots[0].kind == "harpoon" and game.acorns == 4 and game.shots[0].damage == 1 and not game.shots[0].pierce, "a harpoon costs 1 acorn and flies like an acorn")
+    check(game.shots[0].x >= game.squirrel.x + game.squirrel.w, "...leaving the gun's muzzle")
+    var hp_skunk := Enemy.create("skunk", 400.0, 430.0)
+    game.layers["ground"].add_child(hp_skunk)
+    game.enemies.append(hp_skunk)
+    game._damage_enemy(hp_skunk, game.shots[0].damage)
+    check(hp_skunk.defeated, "...and hurts like one")
+    check(game.armor_hp == Weapons.ARMOR_HP and Weapons.ARMOR_HP == 30, "the armor starts with 30 health points")
+    var arm_tree := TreeProp.new()
+    arm_tree.place(300.0, 425.0)
+    game.layers["trees"].add_child(arm_tree)
+    game.trees.append(arm_tree)
+    for i in 400:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.loadout.lives == Weapons.START_LIVES and game.armor_hp == 29 and not game.trees.has(arm_tree), "walking into a tree costs 1 health point (no death)")
+    var arm_foe := Enemy.create("skunk", 300.0, 430.0)
+    game.layers["ground"].add_child(arm_foe)
+    game.enemies.append(arm_foe)
+    for i in 300:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.armor_hp == 28, "an opponent reaching the diver costs 1 health point")
+    var arm_gas := EnemyShot.create("gas", game.squirrel.x + 20.0, game.squirrel.y + 20.0)
+    game.layers["shots"].add_child(arm_gas)
+    game.enemy_shots.append(arm_gas)
+    for i in 8:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.armor_hp == 27, "a gas cloud costs 1 health point once, not once per tick")
+    game._spawn_boss()
+    game.boss.boss_state = "charge"
+    game.boss.x = 240.0
+    game.boss.prev_x = 240.0
+    game.boss.sync()
+    for i in 60:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.armor_hp == 26, "the boss charging into the diver costs 1 health point")
+    var arm_box := Box.new()
+    arm_box.place(game.squirrel.x + 30.0, game.squirrel.y)
+    game.layers["boxes"].add_child(arm_box)
+    game.boxes.append(arm_box)
+    for i in 30:
+        game.frame(dt)
+    check(not game.squirrel.game_over and game.armor_hp == 26, "running into a box costs nothing")
+    arm_box.active = false
+    for i in 60:
+        game.frame(dt)  # (back on the ground)
+    game.armor_hp = 1
+    var lives_b: int = game.loadout.lives
+    game._hurt()
+    check(not game.armored and game.armor_hp == 0 and game.weapon == "acorn" and game.loadout.lives == lives_b and not game.squirrel.game_over
+        and game.invuln_timer > 0.0 and game.announce_text == Lang.t("ARMOR BROKEN!"), "at 0 the armor breaks: no life lost, the old weapon is back, a brief grace")
+    game.do_jump()
+    check(game.squirrel.velocity_y < 0.0, "...the squirrel can jump again")
+    game.invuln_timer = 0.0
+    game._hurt()
+    check(game.squirrel.game_over, "...and the next hit is lethal as usual")
+    game._complete_run(false)
+    game._begin_next_run()
+    _quiet(game)
+    check(not game.armored and game.weapon == "acorn" and not game.squirrel.diver, "the run after is a plain squirrel with its old weapon again")
+    game.do_jump()
+    check(game.squirrel.velocity_y < 0.0, "...that can jump")
+    # the armored squirrel is alive for the whole boss fight, so the run ends 2 s after the boss falls
+    game.new_game()
+    game.run = 3
+    game.loadout.armor_ready = true
+    _quiet(game)  # (starts run 3 in the armor)
+    check(game.armored and Game.is_boss_run(game.run), "a boss run in the armor")
+    game.run_time = Game.RUN_SECONDS - 0.01
+    game.frame(dt)
+    game.frame(dt)
+    var lives_before: int = game.loadout.lives
+    game._damage_enemy(game.boss, 999)
+    game.boss.y = Cfg.SCREEN_H + 50.0  # it has already fallen off screen: its node gets freed
+    game.frame(dt)
+    await process_frame  # (queue_free only happens between frames)
+    check(game.boss == null, "the fallen boss node is really gone")
+    for i in 59:
+        game.frame(dt)
+    check(game.armored and game.phase == "run" and game.boss_down_time > 0.9, "armored: the run is still going 1 s after the boss falls")
+    for i in 70:
+        game.frame(dt)
+    check(game.phase == "run_complete" and game.complete_boss and game.loadout.lives == lives_before + 1, "...and completes (boss defeated, +1 life) after the 2 s")
+
     game.new_game()
     game.loadout.coins = 100
     check(Shop.activate(game.loadout, Shop.LIFE_ROW) == "Extra life!" and game.loadout.lives == 4 and game.loadout.coins == 100 - Weapons.LIFE_PRICE, "the shop sells extra lives")
@@ -1126,7 +1251,7 @@ func _initialize() -> void:
     print("sound")
     var a: AudioHub = game.audio
     var missing: Array[String] = []
-    for nm in ["jump", "land", "throw_acorn", "throw_spread", "throw_boomerang", "throw_chestnut", "throw_pinecone", "throw_rainbow", "throw_homing",
+    for nm in ["jump", "land", "throw_acorn", "throw_spread", "throw_boomerang", "throw_chestnut", "throw_pinecone", "throw_harpoon", "throw_homing",
             "boom", "hit", "enemy_defeat", "coin", "rainbow_collect", "box_bump", "shield_clang", "warn", "whoosh", "stomp", "dive", "pounce", "roll",
             "hiss", "fireball", "splat", "mole_pop", "boss_roar", "life_lost", "respawn", "shop_bell", "buy", "no_money", "ui_move", "ui_select",
             "ui_back", "pause", "fist_start", "fist_dash", "fist_hit", "fist_turn", "fist_end", "fade", "smash", "dwarf_blip", "dwarf_laugh", "oneup",
@@ -1148,6 +1273,7 @@ func _initialize() -> void:
                 used.append(found)
     for wid in Weapons.ORDER:
         used.append("throw_" + wid)
+    used.append("throw_harpoon")  # the Diver Armor's gun (not in ORDER: not sold)
     var silent: Array[String] = []
     for nm in used:
         if a.sfx_stream(nm) == null:
@@ -1201,7 +1327,7 @@ func _initialize() -> void:
     for i in 80:
         game.frame(dt)
     check(a.heard("land"), "landing thuds")
-    for wid in ["acorn", "spread", "boomerang", "chestnut", "pinecone", "rainbow", "homing"]:
+    for wid in ["acorn", "spread", "boomerang", "chestnut", "pinecone", "harpoon", "homing"]:
         game.weapon = wid
         game.acorns = 9
         game.loadout.stock["chestnut"] = 10  # (a consumable: thrown with D)
@@ -1274,10 +1400,10 @@ func _initialize() -> void:
     var cp: Loadout = game.loadout
     cp.coins = 120
     check(cp.stock_left("chestnut") == 0 and cp.stock_left("acorn") == -1 and not game.throw_chestnut(), "no chestnuts at the start: D does nothing")
-    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 10 and cp.coins == 70 and cp.equipped == "acorn", "one purchase = a pack of 10 chestnuts (the Q weapon does not change)")
-    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 20 and cp.coins == 20, "buying again adds another 10")
+    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 10 and cp.coins == 85 and cp.equipped == "acorn", "one purchase = a pack of 10 chestnuts (the Q weapon does not change)")
+    check(Shop.activate(cp, "chestnut").contains("x10") and cp.stock_left("chestnut") == 20 and cp.coins == 50, "buying again adds another 10")
     var crow: Dictionary = Shop.rows(cp, 2, false).filter(func(r: Dictionary) -> bool: return r["id"] == "chestnut")[0]
-    check(crow["name"].contains("x10") and crow["name"].contains("(20 left)") and crow["status"] == "50 coins" and crow["detail"].contains("press D"), "the shop shows the pack size, what is left and the key")
+    check(crow["name"].contains("x10") and crow["name"].contains("(20 left)") and crow["status"] == "35 coins" and crow["detail"].contains("press D"), "the shop shows the pack size, what is left and the key")
     cp.coins = 10
     check(Shop.activate(cp, "chestnut") == "Not enough coins." and cp.stock_left("chestnut") == 20, "too poor for another pack")
     game.start_run()
@@ -1403,7 +1529,7 @@ func _initialize() -> void:
     check(Lang.t("Run %d", [2]) == "Run 2" and Lang.t("RUN %d", [2]) == "MANCHE 2", "formatting + fallback to english")
     var fr_ids: Array = game.menu_items().filter(func(i: Dictionary) -> bool: return i["id"] == "language")
     check(fr_ids[0]["text"] == "Langue : Français", "menu shows the language in its own name")
-    check(Shop.rows(game.loadout, 2, false)[0]["status"] == "ÉQUIPÉ", "shop is translated")
+    check(Shop.rows(game.loadout, 2, false)[0]["status"] == "5 pièces" and Shop.rows(game.loadout, 2, false)[0]["detail"].contains("Achète"), "shop is translated")
     var reload := Profile.new()
     reload.load_from_disk()
     check(reload.language == "fr" and Lang.current == "fr", "chosen language is saved")
@@ -1412,8 +1538,53 @@ func _initialize() -> void:
     game.toggle_language()
     check(Lang.current == "en", "...and back to english")
 
+    print("shop affordability")
+    game.new_game()
+    var af: Loadout = game.loadout
+    var af_enabled := func(id: String) -> bool:
+        return Shop.rows(af, 2, false).filter(func(r: Dictionary) -> bool: return r["id"] == id)[0]["enabled"]
+    var af_up := InputEventAction.new()
+    af_up.action = "ui_up"
+    af_up.pressed = true
+    var af_down := InputEventAction.new()
+    af_down.action = "ui_down"
+    af_down.pressed = true
+    af.coins = 0
+    check(af_enabled.call("next_run") and not af_enabled.call("acorn") and not af_enabled.call("spread") and not af_enabled.call(Shop.LIFE_ROW), "broke: only 'start run' is selectable")
+    game._enter_shop()
+    check(game.shop_selection == game._shop_rows().size() - 1, "broke: the cursor starts on 'start run'")
+    game._menu_input(af_down)
+    check(game.shop_selection == game._shop_rows().size() - 1, "broke: UP/DOWN stay on 'start run'")
+    af.coins = 20
+    check(af_enabled.call("acorn") and af_enabled.call("spread") and af_enabled.call("boomerang") and not af_enabled.call("chestnut") and not af_enabled.call("pinecone"), "20 coins: acorn, triple acorn and boomerang are payable, the rest is not")
+    game._enter_shop()
+    check(game.shop_selection == 0, "the cursor starts on the first payable row")
+    game._menu_input(af_down)
+    game._menu_input(af_down)
+    check(game._shop_rows()[game.shop_selection]["id"] == "boomerang", "DOWN walks over payable rows")
+    game._menu_input(af_down)
+    check(game._shop_rows()[game.shop_selection]["id"] == Shop.AMMO_ROW, "DOWN skips what costs too much (chestnut, pinecone, ..., Matrix Fist, Extra Life)")
+    game._menu_input(af_down)
+    check(game._shop_rows()[game.shop_selection]["id"] == Shop.NEXT_RUN_ROW, "...down to 'start run'")
+    game._menu_input(af_down)
+    check(game.shop_selection == 0, "...and wraps to the first payable row")
+    game._menu_input(af_up)
+    check(game._shop_rows()[game.shop_selection]["id"] == Shop.NEXT_RUN_ROW, "UP wraps backwards, skipping unpayable rows")
+    af.coins = 40
+    game.shop_selection = game._shop_rows().map(func(r: Dictionary) -> String: return r["id"]).find("chestnut")
+    game._menu_input(enter)
+    check(af.stock_left("chestnut") == 10 and af.coins == 5 and game._shop_rows()[game.shop_selection]["enabled"], "after buying, the cursor leaves a row that became unaffordable")
+    af.coins = 20
+    game.shop_selection = 2  # boomerang
+    game._menu_input(enter)
+    check(af.coins == 0 and af_enabled.call("boomerang") and not af_enabled.call("acorn"), "owned weapons stay selectable at 0 coins; the refill does not")
+    af.lives = Weapons.MAX_LIVES
+    af.coins = 500
+    check(not af_enabled.call(Shop.LIFE_ROW), "maximum lives: Extra Life is disabled however rich")
+
     print("shop UI")
     game.new_game()
+    game.loadout.coins = 100
     game._enter_shop()
     game.frame(dt)
     check(game.hud.overlay.visible and game.hud.menu_root.get_child_count() > 15, "shop screen renders (%d nodes)" % game.hud.menu_root.get_child_count())
