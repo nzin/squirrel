@@ -29,7 +29,7 @@ A *game* is a series of **runs**:
 - **Shop** (between runs; a shopkeeper figure describes each ware in a speech bubble and cheers when you buy if its local art is installed, otherwise the descriptions appear in a note panel): what you cannot pay is grayed out and skipped by the cursor; buy weapons (equipped on purchase), *Matrix Fist* (pack of 3), the one-run *Diver Armor*, *Extra Life* and the *Bigger Pouch* upgrade (5 levels).
 - Weapons (see `scripts/weapons.gd`): Acorn, Triple Acorn, Boomerang, Exploding Chestnut (bounces, then explodes: **2 damage to every opponent close by**, within 75 px; sold in packs of 10, thrown with the **D** key like the Matrix Fist is on **F**, and uses no acorns), Pinecone Bomb (a burst along the ground when it lands, a mushroom cloud when it hits something), Homing Acorn. Not enough ammo for the equipped weapon falls back to a plain acorn. Every explosion starts with a brief white flash of the whole screen.
 - You can stand on trees and on opponents; collision boxes follow the visible part of each sprite (`hitbox` fractions in `enemy.gd` / `tree_prop.gd`, measured from the art).
-- **Ride a bird**: land on a bird and it turns to face right and carries you, flying at the speed of the scrolling so it stays in place on screen (it does not drop eggs on you), until you jump; then it turns back and flies on to the left. Shoot it and you fall.
+- **Ride a bird**: land on a bird and it turns to face right and carries you, flying at the speed of the scrolling so it stays in place on screen (birds never drop anything), until you jump; then it turns back and flies on to the left. Shoot it and you fall.
 
 ### Diver Armor (shop, one run)
 
@@ -48,7 +48,7 @@ Data-driven in `scripts/enemy.gd` (`ai`, `shoot`, `shoot_from`, `shield_from` in
 | Enemy | Movement | From run | Shoots (from run) |
 |---|---|---|---|
 | Skunk | walks | 1 | gas cloud rolling on the ground (3) |
-| Bird | sine wave | 1 | drops eggs (4) |
+| Bird | sine wave | 1 | never shoots |
 | Pterodactyl | blinks, then **dives** at you | 1 (on clouds) | fireballs (5) |
 | Beaver | blinks, then **charges** | 2 | - |
 | Mole | **tunnels toward you**, surfaces just ahead | 3 | - |

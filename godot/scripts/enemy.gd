@@ -20,7 +20,7 @@ extends Entity
 ## swoop and a fast jittery zigzag)
 ## Protection: `shielded` blocks shots from the front (not bombs, or a
 ## returning boomerang); extra hp from armor in later runs; `enraged` below
-## half hp (faster, from run 4 only). Shooting ("shoot": gas / egg / fire) only from `shoot_from`.
+## half hp (faster, from run 4 only). Shooting ("shoot": gas / fire) only from `shoot_from`.
 ## All movement is multiplied by Cfg.time_scale so slow motion stays smooth.
 
 const KINDS := {
@@ -57,7 +57,7 @@ const KINDS := {
         "w": 60.0, "h": 60.0, "air": true, "hp": 1,
         "frames": ["bird_1.png", "bird_2.png"],
         "interval": 0.5, "random_frames": false, "forward": -0.5, "fall_vx": -2.5,
-        "ai": "wave", "shoot": "egg", "shoot_from": 4,
+        "ai": "wave",  # (a bird never shoots or drops anything)
     },
     "ptero": {
         "hit": Rect2(0.19, 0.18, 0.55, 0.54), "coins": 8,
@@ -169,7 +169,6 @@ const BURROW_SPEED := -2.5
 const SURFACE_DISTANCE := 170.0
 const WAVE_AMP := 35.0
 const WAVE_FREQ := 2.4
-const EGG_GRAVITY := EnemyShot.EGG_G
 
 const BLINK_RED := Color(1.0, 0.45, 0.35)
 const BLINK_YELLOW := Color(1.0, 0.95, 0.4)
@@ -627,7 +626,7 @@ func _update_defeated(scroll_speed: float) -> void:
 
 # ---------------------------------------------------------------- shooting
 
-## Later enemies shoot: skunks spray gas, birds drop eggs, pterodactyls spit
+## Later enemies shoot: skunks spray gas, pterodactyls spit
 ## fire. Each blinks yellow for TELEGRAPH seconds before firing.
 func _update_shooting(delta: float, target: Rect2) -> void:
     if not can_shoot or target.size == Vector2.ZERO:
@@ -655,12 +654,6 @@ func _shot_lined_up(r: Rect2, target: Rect2) -> bool:
             return dx > 140.0 and dx < 520.0
         "fire":
             return dx > 200.0 and dx < 620.0
-        "egg":
-            # the egg keeps the bird's drift: drop it early enough to land on the squirrel
-            var fall := maxf(target.position.y - r.end.y, 1.0)
-            var frames := sqrt(2.0 * fall / EGG_GRAVITY) + TELEGRAPH * 60.0
-            var lead := (Cfg.SCROLL_SPEED + 0.5) * frames
-            return absf((r.get_center().x - target.get_center().x) - lead) < 30.0
     return false
 
 

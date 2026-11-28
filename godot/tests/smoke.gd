@@ -157,10 +157,9 @@ func _initialize() -> void:
     print("riding a bird")
     game.new_game()
     _quiet(game)
-    game.run = 9  # run 9: birds are able to shoot, so we can check this one does not
+    game.run = 9  # a late run: birds still never drop anything
     var ride_bird := Enemy.create("bird", 40.0, 300.0)
-    ride_bird.can_shoot = true
-    ride_bird.shoot_cd = 0.0
+    ride_bird.scale_for_run(game.run)
     game.layers["air"].add_child(ride_bird)
     game.enemies.append(ride_bird)
     game.squirrel.y = 262.0
@@ -900,14 +899,14 @@ func _initialize() -> void:
     var sk_b := Enemy.create("skunk", 0.0, 0.0)
     sk_b.scale_for_run(3)
     var bd_a := Enemy.create("bird", 0.0, 0.0)
-    bd_a.scale_for_run(3)
+    bd_a.scale_for_run(4)
     var bd_b := Enemy.create("bird", 0.0, 0.0)
-    bd_b.scale_for_run(4)
+    bd_b.scale_for_run(30)
     var pt_a := Enemy.create("ptero", 0.0, 0.0)
     pt_a.scale_for_run(4)
     var pt_b := Enemy.create("ptero", 0.0, 0.0)
     pt_b.scale_for_run(5)
-    check(not sk_a.can_shoot and sk_b.can_shoot and not bd_a.can_shoot and bd_b.can_shoot and not pt_a.can_shoot and pt_b.can_shoot, "nobody shoots in the first runs: skunk 3+, bird 4+, ptero 5+")
+    check(not sk_a.can_shoot and sk_b.can_shoot and not bd_a.can_shoot and not bd_b.can_shoot and not pt_a.can_shoot and pt_b.can_shoot, "nobody shoots in the first runs: skunk 3+, ptero 5+; a bird never drops anything, whatever the run")
     game.new_game()
     game.run = 3
     game.start_run()
@@ -939,10 +938,6 @@ func _initialize() -> void:
     var acorn_shot := Shot.create("acorn", 395.0, 470.0)
     game._shot_hits_enemy_shots(acorn_shot)
     check(not gas2.active and not acorn_shot.active, "an acorn shoots down a projectile")
-    var egg := EnemyShot.create("egg", 400.0, 300.0)
-    for i in 120:
-        egg.update(dt)
-    check(not egg.active, "eggs fall and splat on the ground")
 
     print("Matrix Fist")
     check(is_equal_approx(Game.fist_time_scale(0.0), 1.0) and is_equal_approx(Game.fist_time_scale(1.0), Game.FIST_SLOW)

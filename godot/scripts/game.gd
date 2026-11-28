@@ -947,7 +947,7 @@ func frame(delta: float) -> void:
         if live:
             es.update(gd)
         if not es.active:
-            if (es.kind == "egg" or es.kind == "nut") and es.y + es.h >= Cfg.SOIL_Y:
+            if es.kind == "nut" and es.y + es.h >= Cfg.SOIL_Y:
                 audio.sfx("splat")
             _drop(enemy_shots, es)
     for c: Cloud in clouds.duplicate():
@@ -1298,8 +1298,6 @@ func _fire_enemy_shot(e: Enemy, kind: String) -> void:
     match kind:
         "gas":
             es = EnemyShot.create("gas", r.position.x - 6.0, Cfg.SOIL_Y - 22.0)
-        "egg":
-            es = EnemyShot.create("egg", r.get_center().x, r.end.y)
         "nut":  # leaves his front paws (the side he faces) and flies straight and level
             es = EnemyShot.create("nut", r.position.x - 12.0, r.position.y + r.size.y * 0.45)
         _:  # "fire": aimed at the squirrel
